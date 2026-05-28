@@ -58,7 +58,26 @@
         .chart-container { position: relative; height: 300px; width: 100%; }
         .cat-table-container { margin-top: 30px; }
         .filters { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; justify-content: center; flex-wrap: wrap; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
-    </style>
+    /* --- ADATTAMENTO PER SMARTPHONE --- */
+@media (max-width: 768px) {
+    header { 
+        flex-direction: column; /* Mette gli elementi uno sotto l'altro */
+        text-align: center; 
+        gap: 15px; 
+    }
+    .nav-buttons { 
+        display: flex; 
+        flex-wrap: wrap; 
+        justify-content: center; 
+    }
+    #delta-widget { 
+        width: 100%; 
+    }
+    .dashboard-grid { 
+        grid-template-columns: 1fr; /* Pulsanti grandi uno sotto l'altro */
+    }
+}
+</style>
 </head>
 <body>
     <div id="login-screen" class="card text-center">
