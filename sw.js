@@ -1,5 +1,18 @@
+const CACHE_NAME = 'spese-casa-v3';
+const urlsToCache = [
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
+];
+
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); // Forza l'aggiornamento immediato dell'app
+    self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then((cache) => cache.addAll(urlsToCache))
+    );
 });
 
 self.addEventListener('activate', (event) => {
@@ -7,7 +20,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-    // Lascia passare tutti i dati (necessario per non bloccare Firebase)
     event.respondWith(
         fetch(event.request).catch(() => caches.match(event.request))
     );
