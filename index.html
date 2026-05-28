@@ -274,6 +274,17 @@
             } 
         }
 
+	function svuotaArchivio() { 
+            if (confirm("⚠️ ATTENZIONE ESTREMA!\nVuoi cancellare l'INTERO archivio online di ENZO e CLORINDA?\nTutti i dati verranno persi per sempre per entrambi.")) { 
+                // Su Firebase bisogna cancellare i documenti uno a uno
+                spese.forEach(s => {
+                    db.collection("spese").doc(s.id).delete();
+                });
+                anniEspansi.clear();
+                alert("Archivio azzerato con successo dal database.");
+            } 
+        }
+
         function salvaModifica() { 
             const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); 
             if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); 
