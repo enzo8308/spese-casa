@@ -77,15 +77,23 @@
     </div>
 
     <div id="app-screen" class="hidden container">
-        <header>
-            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="margin:0;">Ciao, <span id="current-user-display"></span>!</h3>
+	<header>
+            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; position: relative;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <span>Ciao, <span id="current-user-display"></span>!</span>
+                    <span onclick="toggleMenu()" style="cursor:pointer; font-size: 20px;">⚙️</span>
+                </h3>
+                
+                <!-- Menu a tendina nascosto -->
+                <div id="settings-menu" class="hidden" style="position: absolute; top: 35px; left: 0; background: white; color: #333; padding: 12px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 1px solid #ddd; z-index: 100;">
+                    <div onclick="apriCambioPassword()" style="cursor:pointer; font-size: 14px; font-weight: bold;">🔑 Cambia Password</div>
+                </div>
+
                 <div id="status-online" style="color: #2ecc71; font-size: 12px; font-weight: bold;">🟢 Online</div>
             </div>
             <div id="delta-widget">Calcolo in corso...</div>
             <div class="nav-buttons">
                 <button onclick="navigate('home')">Home</button>
-                <button onclick="changePasswordPrompt()">Password</button>
                 <button class="btn-danger" onclick="logout()">Esci</button>
             </div>
         </header>
@@ -107,15 +115,13 @@
             <button class="btn btn-danger" onclick="navigate('home')" style="width:100%;">Annulla</button>
         </div>
 
-        <div id="view-modifica" class="hidden card">
-            <h3>Modifica Operazione</h3>
-            <input type="hidden" id="mod-id">
-            <div class="form-group"><label>Utente</label><select id="mod-utente"><option value="ENZO">ENZO</option><option value="CLORINDA">CLORINDA</option></select></div>
-            <div class="form-group"><label>Data</label><input type="date" id="mod-data" required></div>
-            <div class="form-group"><label>Causale</label><input type="text" id="mod-causale" required></div>
-            <div class="form-group"><label>Importo (€)</label><input type="number" id="mod-importo" step="0.01" min="0" required></div>
-            <button class="btn" style="background-color: var(--success); width:100%; margin-bottom:10px;" onclick="salvaModifica()">Conferma e Salva</button>
-            <button class="btn btn-danger" onclick="navigate('archivio')" style="width:100%;">Annulla</button>
+	<div id="view-cambio-password" class="hidden card">
+            <h3>Cambia Password</h3>
+            <div class="form-group"><label>Password Attuale</label><input type="password" id="pass-attuale"></div>
+            <div class="form-group"><label>Nuova Password</label><input type="password" id="pass-nuova"></div>
+            <div class="form-group"><label>Ripeti Nuova Password</label><input type="password" id="pass-conferma"></div>
+            <button class="btn" style="background-color: var(--success); width:100%; margin-bottom:10px;" onclick="salvaNuovaPassword()">Salva Nuova Password</button>
+            <button class="btn btn-danger" onclick="navigate('home')" style="width:100%;">Annulla</button>
         </div>
 
         <div id="view-archivio" class="hidden card">
@@ -250,7 +256,42 @@
         
         function logout() { currentUser = null; document.getElementById('app-screen').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); document.getElementById('delta-widget').style.display = 'none'; }
         function changePasswordPrompt() { const newPass = prompt("Nuova password:"); if (newPass) { users[currentUser] = newPass.trim(); localStorage.setItem('usersCasa', JSON.stringify(users)); alert('Aggiornata!'); } }
-        function navigate(viewName) { ['home', 'inserimento', 'archivio', 'statistiche', 'modifica'].forEach(v => document.getElementById('view-' + v).classList.add('hidden')); document.getElementById('view-' + viewName).classList.remove('hidden'); if(viewName === 'archivio') caricaArchivio(); if(viewName === 'statistiche') generaStatistiche(); }
+        function navigate(viewName) { 
+            ['home', 'inserimento', 'archivio', 'statistiche', 'modifica', 'cambio-password'].forEach(v => document.getElementById('view-' + v).classList.add('hidden')); 
+            document.getElementById('view-' + viewName).classList.remove('hidden'); 
+            if(viewName === 'archivio') caricaArchivio(); 
+            if(viewName === 'statistiche') generaStatistiche(); 
+            document.getElementById('settings-menu').classList.add('hidden'); // Chiude il menu se cambi pagina
+        }
+	function toggleMenu() {
+            document.getElementById('settings-menu').classList.toggle('hidden');
+        }
+
+        function apriCambioPassword() {
+            document.getElementById('settings-menu').classList.add('hidden');
+            document.getElementById('pass-attuale').value = '';
+            document.getElementById('pass-nuova').value = '';
+            document.getElementById('pass-conferma').value = '';
+            navigate('cambio-password');
+        }
+
+        function salvaNuovaPassword() {
+            const attuale = document.getElementById('pass-attuale').value;
+            const nuova = document.getElementById('pass-nuova').value;
+            const conferma = document.getElementById('pass-conferma').value;
+
+            if (!attuale || !nuova || !conferma) return alert("Compila tutti i campi!");
+            if (attuale !== users[currentUser]) return alert("La password attuale è errata!");
+            if (nuova !== conferma) return alert("Le nuove password non coincidono!");
+            if (nuova.length < 4) return alert("La nuova password deve avere almeno 4 caratteri!");
+
+            // Salva la nuova password
+            users[currentUser] = nuova.trim();
+            localStorage.setItem('usersCasa', JSON.stringify(users));
+            alert("Password aggiornata con successo!");
+            navigate('home');
+        }
+
 
         // ==========================================
         // DATABASE FIREBASE (SALVATAGGIO)
