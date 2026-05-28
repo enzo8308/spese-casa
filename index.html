@@ -7,7 +7,7 @@
     
     <!-- PWA Meta Tags -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2c3e50">
+    <meta name="theme-color" content="#f5f6fa">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,7 +26,7 @@
         .container { max-width: 1100px; margin: 0 auto; padding: 15px; padding-top: env(safe-area-inset-top); }
         .hidden { display: none !important; }
         .text-center { text-align: center; }
-        header { background: var(--primary); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        header { background: linear-gradient(135deg, #3498db, #2980b9); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; margin-top: 10px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
         .nav-buttons button, .btn { background: var(--accent); color: white; border: none; padding: 12px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; transition: 0.3s; margin: 5px 5px 5px 0; }
         .nav-buttons button:hover, .btn:hover { background: #2980b9; }
         .btn-danger { background: var(--danger); }
@@ -322,7 +322,7 @@
                 spesePerAnno[anno].forEach(s => {
                     const tr = document.createElement('tr'); if (!espanso) tr.classList.add('hidden');
                     const dataFormat = new Date(s.data).toLocaleDateString('it-IT'); let iconaCat = categorizzaSpesa(s.causale).split(' ')[0]; 
-                    tr.innerHTML = `<td>${dataFormat}</td><td><b>${s.utente.substring(0,3)}</b></td><td>${iconaCat} ${s.causale.toUpperCase()}</td><td>€${s.importo.toFixed(0)}</td>
+                    tr.innerHTML = `<td>${dataFormat}</td><td><b>${s.utente.substring(0,3)}</b></td><td>${iconaCat} ${s.causale.toUpperCase()}</td><td>€${s.importo.toFixed(2)}</td>
                     <td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px;" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px;" onclick="eliminaSpesa('${s.id}')">❌</button></td>`;
                     tbody.appendChild(tr);
                 });
