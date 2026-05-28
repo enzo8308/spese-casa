@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gestione Spese Casa</title>
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <!-- Librerie Firebase, Grafici ed Excel -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        :root { --primary: #2c3e50; --secondary: #34495e; --accent: #3498db; --light: #ecf0f1; --success: #27ae60; --danger: #e74c3c; --enzo-color: #ffb6c1; --clorinda-color: #add8e6; }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background-color: #f5f6fa; color: #333; overscroll-behavior-y: none; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 15px; padding-top: env(safe-area-inset-top); }
+        .hidden { display: none !important; }
+        .text-center { text-align: center; }
+        header { background: var(--primary); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        .nav-buttons button, .btn { background: var(--accent); color: white; border: none; padding: 12px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; transition: 0.3s; margin: 5px 5px 5px 0; }
+        .nav-buttons button:hover, .btn:hover { background: #2980b9; }
+        .btn-danger { background: var(--danger); }
+        .btn-danger:hover { background: #c0392b; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        #login-screen { max-width: 400px; margin: 80px auto; padding: 30px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
+        .dash-btn { padding: 25px 15px; font-size: 16px; font-weight: bold; background: white; border: 2px solid var(--accent); color: var(--accent); border-radius: 10px; cursor: pointer; transition: 0.3s; }
+        .dash-btn:hover { background: var(--accent); color: white; }
+        #delta-widget { padding: 10px 15px; border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); display: none; text-align: center; width: 100%; max-width: 300px; margin: 0 auto; }
+        .delta-titolo { display: block; font-size: 11px; color: #444; font-weight: 800; margin-bottom: 2px; }
+        .delta-cifra { display: block; font-size: 22px; font-weight: 800; color: #000; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: var(--secondary); color: white; cursor: pointer; user-select: none; }
+        tr:hover:not(.year-header) { background-color: #f1f2f6; }
+        .year-header { background-color: #dff9fb; font-weight: bold; user-select: none; }
+        .btn-toggle { display: inline-block; width: 24px; text-align: center; font-family: monospace; font-size: 16px; font-weight: bold; cursor: pointer; color: var(--accent); }
+        .report-header { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-card { flex: 1; min-width: 150px; padding: 15px; border-radius: 8px; text-align: center; color: white; }
+        .stat-card h4 { margin: 0 0 5px 0; font-size: 12px; text-transform: uppercase; }
+        .stat-card p { margin: 0; font-size: 22px; font-weight: bold; }
+        .bg-total { background-color: var(--secondary); } .bg-enzo { background-color: #ff9fb4; color: #000; } .bg-clorinda { background-color: #8dbed0; color: #000; }
+        .charts-wrapper { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 20px; }
+        .chart-box { background: #fdfdfd; padding: 10px; border: 1px solid #eee; border-radius: 8px; }
+        .chart-container { position: relative; height: 250px; width: 100%; }
+        .filters { display: flex; gap: 10px; margin-bottom: 20px; flex-direction: column; background: #f8f9fa; padding: 15px; border-radius: 8px; }
+        .filters > div { width: 100%; display: flex; justify-content: space-between; align-items: center; }
+
+        /* Ottimizzazione Smartphone */
+        @media (max-width: 768px) {
+            header { flex-direction: column; text-align: center; }
+            .nav-buttons { display: flex; flex-wrap: wrap; justify-content: center; width: 100%; }
+            .table-wrapper { overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div id="login-screen" class="card text-center">
+        <svg viewBox="0 0 512 512" width="80" height="80" style="margin-bottom: 15px;"><rect width="512" height="512" rx="112" fill="#2c3e50"/><polygon points="256,110 100,260 412,260" fill="#3498db"/><rect x="130" y="260" width="252" height="160" fill="#ecf0f1"/><rect x="206" y="320" width="100" height="100" fill="#34495e"/><rect x="186" y="280" width="140" height="60" rx="8" fill="#27ae60"/><text x="256" y="325" font-family="Arial, sans-serif" font-size="40" font-weight="bold" fill="white" text-anchor="middle">€</text></svg>
+        <h2 style="margin-top:0;">Spese Casa</h2>
+        <div class="form-group"><select id="login-user"><option value="ENZO">ENZO</option><option value="CLORINDA">CLORINDA</option></select></div>
+        <div class="form-group"><input type="password" id="login-password" placeholder="Inserisci Password"></div>
+        <button class="btn" onclick="login()" style="width:100%">Entra</button>
+    </div>
+
+    <div id="app-screen" class="hidden container">
+        <header>
+            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin:0;">Ciao, <span id="current-user-display"></span>!</h3>
+                <div id="status-online" style="color: #2ecc71; font-size: 12px; font-weight: bold;">🟢 Online</div>
+            </div>
+            <div id="delta-widget">Calcolo in corso...</div>
+            <div class="nav-buttons">
+                <button onclick="navigate('home')">Home</button>
+                <button onclick="changePasswordPrompt()">Password</button>
+                <button class="btn-danger" onclick="logout()">Esci</button>
+            </div>
+        </header>
+
+        <div id="view-home">
+            <div class="dashboard-grid">
+                <button class="dash-btn" onclick="navigate('inserimento')">➕ Inserisci Spesa</button>
+                <button class="dash-btn" onclick="navigate('archivio')">📁 Archivio</button>
+                <button class="dash-btn" onclick="navigate('statistiche')">📊 Report</button>
+            </div>
+        </div>
+
+        <div id="view-inserimento" class="hidden card">
+            <h3>Nuova Spesa</h3>
+            <div class="form-group"><label>Data</label><input type="date" id="spesa-data" required></div>
+            <div class="form-group"><label>Causale</label><input type="text" id="spesa-causale" required></div>
+            <div class="form-group"><label>Importo (€)</label><input type="number" id="spesa-importo" step="0.01" min="0" required></div>
+            <button class="btn" onclick="salvaSpesa()" style="width:100%; margin-bottom:10px;">Salva Spesa</button>
+            <button class="btn btn-danger" onclick="navigate('home')" style="width:100%;">Annulla</button>
+        </div>
+
+        <div id="view-modifica" class="hidden card">
+            <h3>Modifica Operazione</h3>
+            <input type="hidden" id="mod-id">
+            <div class="form-group"><label>Utente</label><select id="mod-utente"><option value="ENZO">ENZO</option><option value="CLORINDA">CLORINDA</option></select></div>
+            <div class="form-group"><label>Data</label><input type="date" id="mod-data" required></div>
+            <div class="form-group"><label>Causale</label><input type="text" id="mod-causale" required></div>
+            <div class="form-group"><label>Importo (€)</label><input type="number" id="mod-importo" step="0.01" min="0" required></div>
+            <button class="btn" style="background-color: var(--success); width:100%; margin-bottom:10px;" onclick="salvaModifica()">Conferma e Salva</button>
+            <button class="btn btn-danger" onclick="navigate('archivio')" style="width:100%;">Annulla</button>
+        </div>
+
+        <div id="view-archivio" class="hidden card">
+            <h3 style="margin-top: 0;">Archivio Spese</h3>
+            <div style="display:flex; gap:5px; margin-bottom: 15px;">
+                <button class="btn" style="flex:1; background-color: var(--success);" onclick="esportaExcel()">📥 Export</button>
+                <button class="btn" style="flex:1; background-color: #e67e22;" onclick="document.getElementById('import-excel-input').click()">📤 Import</button>
+                <input type="file" id="import-excel-input" accept=".xlsx, .xls" style="display:none;" onchange="importaExcel(event)">
+            </div>
+            <div class="table-wrapper">
+                <table id="tabella-spese">
+                    <thead>
+                        <tr>
+                            <th onclick="cambiaOrdinamento('data')">Data ↕️</th>
+                            <th onclick="cambiaOrdinamento('utente')">Utente ↕️</th>
+                            <th onclick="cambiaOrdinamento('causale')">Causale ↕️</th>
+                            <th onclick="cambiaOrdinamento('importo')">€ ↕️</th>
+                            <th>Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-statistiche" class="hidden card">
+            <h3 style="margin-top:0;">Reportistica</h3>
+            <div class="filters">
+                <div><label>Dal: </label><input type="date" id="stat-start"></div>
+                <div><label>Al: </label><input type="date" id="stat-end"></div>
+                <button class="btn" onclick="generaStatistiche()" style="width:100%">Aggiorna</button>
+            </div>
+            <div class="report-header">
+                <div class="stat-card bg-total"><h4>Totale Speso</h4><p id="rep-totale">€ 0</p></div>
+                <div class="stat-card bg-enzo"><h4>Quota ENZO</h4><p id="rep-enzo">€ 0</p></div>
+                <div class="stat-card bg-clorinda"><h4>Quota CLORINDA</h4><p id="rep-clorinda">€ 0</p></div>
+            </div>
+            <div class="charts-wrapper">
+                <div class="chart-box"><div class="chart-container"><canvas id="catChart"></canvas></div></div>
+                <div class="chart-box"><div class="chart-container"><canvas id="userChart"></canvas></div></div>
+            </div>
+            <div class="table-wrapper" style="margin-top:20px;">
+                <table><thead><tr><th>Categoria</th><th>Tot (€)</th></tr></thead><tbody id="tabella-categorie"></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        // ==========================================
+        // CONFIGURAZIONE FIREBASE
+        // SOSTITUISCI QUESTO BLOCCO CON IL TUO CODICE
+        // ==========================================
+        const firebaseConfig = {
+  	apiKey: "AIzaSyAaUv31Q6cK_c-CkiS91rAMFvo90rHDRkc",
+ 	authDomain: "spese-casa-33f0d.firebaseapp.com",
+  	projectId: "spese-casa-33f0d",
+  	storageBucket: "spese-casa-33f0d.firebasestorage.app",
+  	messagingSenderId: "21026414279",
+  	appId: "1:21026414279:web:767db9e54b195cbc12e8e2"
+	};
+
+        // Inizializza Firebase SOLO se è stata inserita la chiave
+        let db = null;
+        if(firebaseConfig.apiKey) {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        }
+
+        // ==========================================
+        // VARIABILI GLOBALI
+        // ==========================================
+        let users = JSON.parse(localStorage.getItem('usersCasa')) || { 'ENZO': '1234', 'CLORINDA': '1234' };
+        let spese = [];
+        let currentUser = null; 
+        let chartCategorie = null; let chartUtenti = null;
+        let sortConfig = { key: 'data', direction: 'desc' };
+        let anniEspansi = new Set(); let primaAperturaArchivio = true;
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const firstDayOfYear = new Date().getFullYear() + '-01-01';
+        document.getElementById('spesa-data').value = todayStr;
+        document.getElementById('stat-start').value = firstDayOfYear;
+        document.getElementById('stat-end').value = todayStr;
+
+        // ==========================================
+        // LOGICA DI SINCRONIZZAZIONE REAL-TIME
+        // ==========================================
+        function initRealTimeSync() {
+            if(!db) return alert("Firebase non configurato! Inserisci la chiave nel codice.");
+            
+            // Questo comando "ascolta" il database online 24h su 24
+            db.collection("spese").onSnapshot((snapshot) => {
+                spese = [];
+                snapshot.forEach((doc) => {
+                    spese.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Aggiorna l'interfaccia automaticamente
+                if(!document.getElementById('view-archivio').classList.contains('hidden')) caricaArchivio();
+                if(!document.getElementById('view-statistiche').classList.contains('hidden')) generaStatistiche();
+                aggiornaWidgetDelta();
+            });
+        }
+
+        function categorizzaSpesa(causale) {
+            const testo = causale.toLowerCase();
+            const categorie = {
+                '🎓 Figli & Scuola': ['scuola', 'retta', 'asilo', 'mensa', 'libri', 'zaino', 'gb', 'figli'],
+                '🛒 Alimentari': ['spesa', 'supermercato', 'decò', 'conad', 'coop', 'esselunga', 'pane', 'macellaio', 'frutta'],
+                '🏠 Casa & Utenze': ['luce', 'gas', 'acqua', 'bolletta', 'internet', 'affitto', 'mutuo', 'condominio', 'ikea'],
+                '🚗 Trasporti': ['benzina', 'diesel', 'assicurazione', 'meccanico', 'telepass', 'treno', 'aereo'],
+                '💊 Salute': ['farmacia', 'medico', 'pediatra', 'dentista', 'medicina', 'ticket'],
+                '🍕 Svago': ['pizza', 'ristorante', 'sushi', 'cinema', 'bar', 'vacanza', 'regalo', 'abbigliamento']
+            };
+            for (const [categoria, keywords] of Object.entries(categorie)) { if (keywords.some(kw => testo.includes(kw))) return categoria; }
+            return '📦 Varie';
+        }
+
+        function login() {
+            const user = document.getElementById('login-user').value; const pass = document.getElementById('login-password').value;
+            if (users[user] === pass) { 
+                currentUser = user; 
+                document.getElementById('current-user-display').innerText = currentUser; 
+                document.getElementById('login-screen').classList.add('hidden'); 
+                document.getElementById('app-screen').classList.remove('hidden'); 
+                navigate('home'); 
+                initRealTimeSync(); // Avvia la sincronizzazione online al login
+            } else { alert('Password errata!'); }
+        }
+        
+        function logout() { currentUser = null; document.getElementById('app-screen').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); document.getElementById('delta-widget').style.display = 'none'; }
+        function changePasswordPrompt() { const newPass = prompt("Nuova password:"); if (newPass) { users[currentUser] = newPass.trim(); localStorage.setItem('usersCasa', JSON.stringify(users)); alert('Aggiornata!'); } }
+        function navigate(viewName) { ['home', 'inserimento', 'archivio', 'statistiche', 'modifica'].forEach(v => document.getElementById('view-' + v).classList.add('hidden')); document.getElementById('view-' + viewName).classList.remove('hidden'); if(viewName === 'archivio') caricaArchivio(); if(viewName === 'statistiche') generaStatistiche(); }
+
+        // ==========================================
+        // DATABASE FIREBASE (SALVATAGGIO)
+        // ==========================================
+        function salvaSpesa() {
+            const data = document.getElementById('spesa-data').value; const causale = document.getElementById('spesa-causale').value.trim(); const importo = parseFloat(document.getElementById('spesa-importo').value);
+            if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Compila i campi.");
+            
+            // Salvataggio nel database Cloud
+            db.collection("spese").add({
+                utente: currentUser, data: data, causale: causale, importo: importo
+            }).then(() => {
+                document.getElementById('spesa-causale').value = ''; document.getElementById('spesa-importo').value = '';
+                anniEspansi.add(data.substring(0, 4)); alert("Salvata Online!"); navigate('archivio');
+            }).catch(error => alert("Errore connessione: " + error));
+        }
+
+        function eliminaSpesa(id) { 
+            if (confirm("Eliminare dal database online?")) { 
+                db.collection("spese").doc(id).delete(); 
+            } 
+        }
+
+        function salvaModifica() { 
+            const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); 
+            if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); 
+            if (confirm("Salvare online?")) { 
+                db.collection("spese").doc(id).update({ utente, data, causale, importo }).then(() => navigate('archivio')); 
+            } 
+        }
+
+        // ==========================================
+        // INTERFACCIA E ARCHIVIO
+        // ==========================================
+        function cambiaOrdinamento(key) { if (sortConfig.key === key) sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc'; else { sortConfig.key = key; sortConfig.direction = (key === 'data' || key === 'importo') ? 'desc' : 'asc'; } caricaArchivio(); }
+        function toggleAnno(anno) { if (anniEspansi.has(anno)) anniEspansi.delete(anno); else anniEspansi.add(anno); caricaArchivio(); }
+        function apriModifica(id) { const spesa = spese.find(s => String(s.id) === String(id)); if (!spesa) return; document.getElementById('mod-id').value = spesa.id; document.getElementById('mod-utente').value = spesa.utente; document.getElementById('mod-data').value = spesa.data; document.getElementById('mod-causale').value = spesa.causale; document.getElementById('mod-importo').value = spesa.importo; navigate('modifica'); }
+
+        function caricaArchivio() {
+            const tbody = document.querySelector('#tabella-spese tbody'); tbody.innerHTML = '';
+            if (spese.length === 0) return;
+            let spesePerAnno = {};
+            spese.forEach(s => { const anno = s.data.substring(0, 4); if (!spesePerAnno[anno]) spesePerAnno[anno] = []; spesePerAnno[anno].push(s); });
+            const anniOrdinati = Object.keys(spesePerAnno).sort((a, b) => b - a);
+            if (primaAperturaArchivio && anniOrdinati.length > 0) { anniEspansi.add(anniOrdinati[0]); primaAperturaArchivio = false; }
+
+            anniOrdinati.forEach(anno => {
+                spesePerAnno[anno].sort((a, b) => {
+                    let valA = a[sortConfig.key]; let valB = b[sortConfig.key];
+                    if (sortConfig.key === 'importo') { valA = parseFloat(valA); valB = parseFloat(valB); } else if (sortConfig.key === 'data') { valA = new Date(valA).getTime(); valB = new Date(valB).getTime(); } else { valA = String(valA).toLowerCase(); valB = String(valB).toLowerCase(); }
+                    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1; if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1; return 0;
+                });
+                const espanso = anniEspansi.has(anno);
+                const trAnno = document.createElement('tr'); trAnno.className = 'year-header';
+                trAnno.innerHTML = `<td colspan="5" onclick="toggleAnno('${anno}')"><span class="btn-toggle">${espanso ? '[-]' : '[+]'}</span> Anno ${anno} <span style="float:right; font-size:12px; font-weight:normal;">(${spesePerAnno[anno].length})</span></td>`;
+                tbody.appendChild(trAnno);
+
+                spesePerAnno[anno].forEach(s => {
+                    const tr = document.createElement('tr'); if (!espanso) tr.classList.add('hidden');
+                    const dataFormat = new Date(s.data).toLocaleDateString('it-IT'); let iconaCat = categorizzaSpesa(s.causale).split(' ')[0]; 
+                    tr.innerHTML = `<td>${dataFormat}</td><td><b>${s.utente.substring(0,3)}</b></td><td>${iconaCat} ${s.causale.toUpperCase()}</td><td>€${s.importo.toFixed(0)}</td>
+                    <td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px;" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px;" onclick="eliminaSpesa('${s.id}')">❌</button></td>`;
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+
+        function aggiornaWidgetDelta() {
+            const widget = document.getElementById('delta-widget');
+            if(!currentUser) { widget.style.display = 'none'; return; }
+            let spesaEnzo = 0; let spesaClorinda = 0;
+            spese.forEach(s => { if (s.utente === 'ENZO') spesaEnzo += s.importo; else if (s.utente === 'CLORINDA') spesaClorinda += s.importo; });
+            widget.style.display = 'block';
+            if (spesaEnzo > spesaClorinda) {
+                const diff = (spesaEnzo - spesaClorinda).toFixed(2); widget.style.backgroundColor = 'var(--enzo-color)';
+                widget.innerHTML = `<span class="delta-titolo">CLORINDA DA RITIRARE:</span><span class="delta-cifra">€ ${diff}</span>`;
+            } else if (spesaClorinda > spesaEnzo) {
+                const diff = (spesaClorinda - spesaEnzo).toFixed(2); widget.style.backgroundColor = 'var(--clorinda-color)';
+                widget.innerHTML = `<span class="delta-titolo">ENZO DA RITIRARE:</span><span class="delta-cifra">€ ${diff}</span>`;
+            } else { widget.style.backgroundColor = '#e1b12c'; widget.innerHTML = `<span class="delta-titolo">Stato conti:</span><span class="delta-cifra" style="color:white;">Pari!</span>`; }
+        }
+
+        // ==========================================
+        // EXPORT / IMPORT (MODIFICATO PER CLOUD)
+        // ==========================================
+        function esportaExcel() { if (spese.length === 0) return alert("Vuoto."); let speseOrdinate = [...spese].sort((a, b) => new Date(b.data) - new Date(a.data)); const ws = XLSX.utils.json_to_sheet(speseOrdinate.map(s => ({ 'Utente': s.utente, 'Data': new Date(s.data).toLocaleDateString('it-IT'), 'Causale': s.causale.toUpperCase(), 'Costo (€)': s.importo }))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Archivio_Spese"); XLSX.writeFile(wb, "Spese_Casa.xlsx"); }
+        function formDataToString(rawData) { if (rawData instanceof Date && !isNaN(rawData)) { let anno = rawData.getFullYear(); let mese = String(rawData.getMonth() + 1).padStart(2, '0'); let giorno = String(rawData.getDate()).padStart(2, '0'); return `${anno}-${mese}-${giorno}`; } else if (rawData) { let dateStr = String(rawData).trim(); if (dateStr.includes('/')) { let p = dateStr.split('/'); if (p.length === 3) { if (p[2].length === 4) return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`; if (p[0].length === 4) return `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`; } } else if (dateStr.includes('-')) { let p = dateStr.split('-'); if (p.length === 3 && p[0].length === 4) return dateStr; } } return ""; }
+        
+        function importaExcel(event) { 
+            const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); 
+            reader.onload = function(e) { 
+                try { 
+                    const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array', cellDates: true }); const worksheet = workbook.Sheets[workbook.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); let count = 0; 
+                    for (let i = 0; i < rows.length; i++) { 
+                        const row = rows[i]; if (!row || row.length < 4) continue; if (i === 0 && (String(row[0]).toLowerCase().includes('utente') || String(row[1]).toLowerCase().includes('data'))) continue; 
+                        let utente = String(row[0] || '').trim().toUpperCase(); let rawData = row[1]; let causale = String(row[2] || '').trim(); let importo = parseFloat(row[3]); 
+                        if (utente !== 'ENZO' && utente !== 'CLORINDA') continue; if (isNaN(importo) || importo <= 0 || !causale) continue; let dataFormattata = formDataToString(rawData); if (!dataFormattata) continue; 
+                        // Salva nel cloud
+                        db.collection("spese").add({ utente: utente, data: dataFormattata, causale: causale, importo: importo });
+                        count++; 
+                    } 
+                    if (count > 0) alert(`Importazione avviata per ${count} movimenti! (Appariranno a breve)`); 
+                } catch (err) { alert("Errore."); } event.target.value = ''; 
+            }; reader.readAsArrayBuffer(file); 
+        }
+
+        // ==========================================
+        // STATISTICHE
+        // ==========================================
+        function generaStatistiche() {
+            const start = document.getElementById('stat-start').value; const end = document.getElementById('stat-end').value; const speseFiltrate = spese.filter(s => s.data >= start && s.data <= end);
+            let totEnzo = 0; let totClorinda = 0; let mappaCategorie = {};
+            speseFiltrate.forEach(s => { if(s.utente === 'ENZO') totEnzo += s.importo; if(s.utente === 'CLORINDA') totClorinda += s.importo; let cat = categorizzaSpesa(s.causale); if(mappaCategorie[cat]) mappaCategorie[cat] += s.importo; else mappaCategorie[cat] = s.importo; });
+            const totaleGenerale = totEnzo + totClorinda;
+            document.getElementById('rep-totale').innerText = `€ ${totaleGenerale.toFixed(0)}`; document.getElementById('rep-enzo').innerText = `€ ${totEnzo.toFixed(0)}`; document.getElementById('rep-clorinda').innerText = `€ ${totClorinda.toFixed(0)}`;
+            const tbodyCat = document.getElementById('tabella-categorie'); tbodyCat.innerHTML = '';
+            if (totaleGenerale === 0) { if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy(); tbodyCat.innerHTML = '<tr><td colspan="2" class="text-center">Nessuna spesa nel periodo.</td></tr>'; return; }
+            const categorieOrdinate = Object.entries(mappaCategorie).sort((a, b) => b[1] - a[1]); const etichetteCat = categorieOrdinate.map(item => item[0]); const datiCat = categorieOrdinate.map(item => item[1]);
+            const baseColors = [ '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#1abc9c', '#34495e' ];
+            categorieOrdinate.forEach(item => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${item[0]}</td><td><b>€ ${item[1].toFixed(0)}</b></td>`; tbodyCat.appendChild(tr); });
+            const ctxCat = document.getElementById('catChart').getContext('2d'); if(chartCategorie) chartCategorie.destroy(); chartCategorie = new Chart(ctxCat, { type: 'doughnut', data: { labels: etichetteCat, datasets: [{ data: datiCat, backgroundColor: baseColors.slice(0, etichetteCat.length), borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+            const ctxUser = document.getElementById('userChart').getContext('2d'); if(chartUtenti) chartUtenti.destroy(); chartUtenti = new Chart(ctxUser, { type: 'bar', data: { labels: ['ENZO', 'CLORINDA'], datasets: [{ label: '€', data: [totEnzo, totClorinda], backgroundColor: ['#ffb6c1', '#add8e6'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
+        }
+    </script>
+</body>
+</html>
