@@ -1,7 +1,7 @@
 {
   "name": "Gestione Spese Casa",
   "short_name": "SpeseCasa",
-  "description": "App per la gestione delle spese di Enzo e Clorinda",
+  "description": "Gestione spese Enzo e Clorinda",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f5f6fa",
@@ -9,7 +9,7 @@
   "icons": [
     {
       "src": "icon.svg",
-      "sizes": "192x192 512x512",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
