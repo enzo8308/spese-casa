@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestione Spese Casa</title>
     
-    <!-- PWA Meta Tags -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#f5f6fa">
     <meta name="mobile-web-app-capable" content="yes">
@@ -13,7 +12,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Librerie Firebase, Grafici ed Excel -->
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -77,16 +75,15 @@
     </div>
 
     <div id="app-screen" class="hidden container">
-	<header>
+        <header>
             <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; position: relative;">
                 <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
                     <span>Ciao, <span id="current-user-display"></span>!</span>
                     <span onclick="toggleMenu()" style="cursor:pointer; font-size: 20px;">⚙️</span>
                 </h3>
                 
-                <!-- Menu a tendina nascosto -->
                 <div id="settings-menu" class="hidden" style="position: absolute; top: 35px; left: 0; background: white; color: #333; padding: 12px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 1px solid #ddd; z-index: 100;">
-                    <div onclick="apriCambioPassword()" style="cursor:pointer; font-size: 14px; font-weight: bold;">🔑 Cambia Password</div>
+                    <div onclick="apriCambioPassword()" style="cursor:pointer; font-size: 14px; font-weight: bold; white-space: nowrap;">🔑 Cambia Password</div>
                 </div>
 
                 <div id="status-online" style="color: #2ecc71; font-size: 12px; font-weight: bold;">🟢 Online</div>
@@ -115,7 +112,18 @@
             <button class="btn btn-danger" onclick="navigate('home')" style="width:100%;">Annulla</button>
         </div>
 
-	<div id="view-cambio-password" class="hidden card">
+        <div id="view-modifica" class="hidden card">
+            <h3>Modifica Operazione</h3>
+            <input type="hidden" id="mod-id">
+            <div class="form-group"><label>Utente</label><select id="mod-utente"><option value="ENZO">ENZO</option><option value="CLORINDA">CLORINDA</option></select></div>
+            <div class="form-group"><label>Data</label><input type="date" id="mod-data" required></div>
+            <div class="form-group"><label>Causale</label><input type="text" id="mod-causale" required></div>
+            <div class="form-group"><label>Importo (€)</label><input type="number" id="mod-importo" step="0.01" min="0" required></div>
+            <button class="btn" style="background-color: var(--success); width:100%; margin-bottom:10px;" onclick="salvaModifica()">Conferma e Salva</button>
+            <button class="btn btn-danger" onclick="navigate('archivio')" style="width:100%;">Annulla</button>
+        </div>
+
+        <div id="view-cambio-password" class="hidden card">
             <h3>Cambia Password</h3>
             <div class="form-group"><label>Password Attuale</label><input type="password" id="pass-attuale"></div>
             <div class="form-group"><label>Nuova Password</label><input type="password" id="pass-nuova"></div>
@@ -126,7 +134,7 @@
 
         <div id="view-archivio" class="hidden card">
             <h3 style="margin-top: 0;">Archivio Spese</h3>
-	    <div style="display:flex; gap:5px; margin-bottom: 15px;">
+            <div style="display:flex; gap:5px; margin-bottom: 15px;">
                 <button class="btn" style="flex:1; background-color: var(--success); padding: 12px 5px;" onclick="esportaExcel()">📥 Export</button>
                 <button class="btn" style="flex:1; background-color: #e67e22; padding: 12px 5px;" onclick="document.getElementById('import-excel-input').click()">📤 Import</button>
                 <button class="btn btn-danger" style="flex:1; padding: 12px 5px;" onclick="svuotaArchivio()">🗑️ Svuota</button>
@@ -171,21 +179,18 @@
     </div>
 
     <script>
-
         // ==========================================
-        // CONFIGURAZIONE FIREBASE
-        // SOSTITUISCI QUESTO BLOCCO CON IL TUO CODICE
+        // CONFIGURAZIONE FIREBASE (PRESERVATA)
         // ==========================================
         const firebaseConfig = {
-  	apiKey: "AIzaSyAaUv31Q6cK_c-CkiS91rAMFvo90rHDRkc",
- 	authDomain: "spese-casa-33f0d.firebaseapp.com",
-  	projectId: "spese-casa-33f0d",
-  	storageBucket: "spese-casa-33f0d.firebasestorage.app",
-  	messagingSenderId: "21026414279",
-  	appId: "1:21026414279:web:767db9e54b195cbc12e8e2"
-	};
+            apiKey: "AIzaSyAaUv31Q6cK_c-CkiS91rAMFvo90rHDRkc",
+            authDomain: "spese-casa-33f0d.firebaseapp.com",
+            projectId: "spese-casa-33f0d",
+            storageBucket: "spese-casa-33f0d.firebasestorage.app",
+            messagingSenderId: "21026414279",
+            appId: "1:21026414279:web:767db9e54b195cbc12e8e2"
+        };
 
-        // Inizializza Firebase SOLO se è stata inserita la chiave
         let db = null;
         if(firebaseConfig.apiKey) {
             firebase.initializeApp(firebaseConfig);
@@ -212,16 +217,14 @@
         // LOGICA DI SINCRONIZZAZIONE REAL-TIME
         // ==========================================
         function initRealTimeSync() {
-            if(!db) return alert("Firebase non configurato! Inserisci la chiave nel codice.");
+            if(!db) return alert("Firebase non configurato!");
             
-            // Questo comando "ascolta" il database online 24h su 24
             db.collection("spese").onSnapshot((snapshot) => {
                 spese = [];
                 snapshot.forEach((doc) => {
                     spese.push({ id: doc.id, ...doc.data() });
                 });
                 
-                // Aggiorna l'interfaccia automaticamente
                 if(!document.getElementById('view-archivio').classList.contains('hidden')) caricaArchivio();
                 if(!document.getElementById('view-statistiche').classList.contains('hidden')) generaStatistiche();
                 aggiornaWidgetDelta();
@@ -238,7 +241,7 @@
                 '💊 Salute': ['farmacia', 'medico', 'pediatra', 'dentista', 'medicina', 'ticket'],
                 '🍕 Svago': ['pizza', 'ristorante', 'sushi', 'cinema', 'bar', 'vacanza', 'regalo', 'abbigliamento']
             };
-            for (const [categoria, keywords] of Object.entries(categorie)) { if (keywords.some(kw => testo.includes(kw))) return categoria; }
+            for (const [categoria, keywords] of Object.entries(categorie)) { if (keywords.some(kw => testo.includes(kw))) return category; }
             return '📦 Varie';
         }
 
@@ -250,25 +253,40 @@
                 document.getElementById('login-screen').classList.add('hidden'); 
                 document.getElementById('app-screen').classList.remove('hidden'); 
                 navigate('home'); 
-                initRealTimeSync(); // Avvia la sincronizzazione online al login
+                initRealTimeSync();
             } else { alert('Password errata!'); }
         }
         
         function logout() { currentUser = null; document.getElementById('app-screen').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); document.getElementById('delta-widget').style.display = 'none'; }
-        function changePasswordPrompt() { const newPass = prompt("Nuova password:"); if (newPass) { users[currentUser] = newPass.trim(); localStorage.setItem('usersCasa', JSON.stringify(users)); alert('Aggiornata!'); } }
+        
+        // ==========================================
+        // NAVIGAZIONE PROTETTA (SISTEMATA)
+        // ==========================================
         function navigate(viewName) { 
-            ['home', 'inserimento', 'archivio', 'statistiche', 'modifica', 'cambio-password'].forEach(v => document.getElementById('view-' + v).classList.add('hidden')); 
-            document.getElementById('view-' + viewName).classList.remove('hidden'); 
+            const views = ['home', 'inserimento', 'archivio', 'statistiche', 'modifica', 'cambio-password'];
+            views.forEach(v => {
+                const el = document.getElementById('view-' + v);
+                if(el) el.classList.add('hidden');
+            }); 
+            
+            const targetEl = document.getElementById('view-' + viewName);
+            if(targetEl) targetEl.classList.remove('hidden');
+            
             if(viewName === 'archivio') caricaArchivio(); 
             if(viewName === 'statistiche') generaStatistiche(); 
-            document.getElementById('settings-menu').classList.add('hidden'); // Chiude il menu se cambi pagina
+            
+            const menu = document.getElementById('settings-menu');
+            if(menu) menu.classList.add('hidden');
         }
-	function toggleMenu() {
-            document.getElementById('settings-menu').classList.toggle('hidden');
+
+        function toggleMenu() {
+            const menu = document.getElementById('settings-menu');
+            if(menu) menu.classList.toggle('hidden');
         }
 
         function apriCambioPassword() {
-            document.getElementById('settings-menu').classList.add('hidden');
+            const menu = document.getElementById('settings-menu');
+            if(menu) menu.classList.add('hidden');
             document.getElementById('pass-attuale').value = '';
             document.getElementById('pass-nuova').value = '';
             document.getElementById('pass-conferma').value = '';
@@ -285,22 +303,19 @@
             if (nuova !== conferma) return alert("Le nuove password non coincidono!");
             if (nuova.length < 4) return alert("La nuova password deve avere almeno 4 caratteri!");
 
-            // Salva la nuova password
             users[currentUser] = nuova.trim();
             localStorage.setItem('usersCasa', JSON.stringify(users));
             alert("Password aggiornata con successo!");
             navigate('home');
         }
 
-
         // ==========================================
-        // DATABASE FIREBASE (SALVATAGGIO)
+        // OPERAZIONI DATABASE
         // ==========================================
         function salvaSpesa() {
             const data = document.getElementById('spesa-data').value; const causale = document.getElementById('spesa-causale').value.trim(); const importo = parseFloat(document.getElementById('spesa-importo').value);
             if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Compila i campi.");
             
-            // Salvataggio nel database Cloud
             db.collection("spese").add({
                 utente: currentUser, data: data, causale: causale, importo: importo
             }).then(() => {
@@ -315,17 +330,6 @@
             } 
         }
 
-	function svuotaArchivio() { 
-            if (confirm("⚠️ ATTENZIONE ESTREMA!\nVuoi cancellare l'INTERO archivio online di ENZO e CLORINDA?\nTutti i dati verranno persi per sempre per entrambi.")) { 
-                // Su Firebase bisogna cancellare i documenti uno a uno
-                spese.forEach(s => {
-                    db.collection("spese").doc(s.id).delete();
-                });
-                anniEspansi.clear();
-                alert("Archivio azzerato con successo dal database.");
-            } 
-        }
-
         function salvaModifica() { 
             const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); 
             if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); 
@@ -334,8 +338,18 @@
             } 
         }
 
+        function svuotaArchivio() { 
+            if (confirm("⚠️ ATTENZIONE ESTREMA!\nVuoi cancellare l'INTERO archivio online di ENZO e CLORINDA?\nTutti i dati verranno persi per sempre per entrambi.")) { 
+                spese.forEach(s => {
+                    db.collection("spese").doc(s.id).delete();
+                });
+                anniEspansi.clear();
+                alert("Archivio azzerato con successo dal database.");
+            } 
+        }
+
         // ==========================================
-        // INTERFACCIA E ARCHIVIO
+        // INTERFACCIA E TABELLA (DECIMALI CORETTE)
         // ==========================================
         function cambiaOrdinamento(key) { if (sortConfig.key === key) sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc'; else { sortConfig.key = key; sortConfig.direction = (key === 'data' || key === 'importo') ? 'desc' : 'asc'; } caricaArchivio(); }
         function toggleAnno(anno) { if (anniEspansi.has(anno)) anniEspansi.delete(anno); else anniEspansi.add(anno); caricaArchivio(); }
@@ -386,7 +400,7 @@
         }
 
         // ==========================================
-        // EXPORT / IMPORT (MODIFICATO PER CLOUD)
+        // EXPORT / IMPORT
         // ==========================================
         function esportaExcel() { if (spese.length === 0) return alert("Vuoto."); let speseOrdinate = [...spese].sort((a, b) => new Date(b.data) - new Date(a.data)); const ws = XLSX.utils.json_to_sheet(speseOrdinate.map(s => ({ 'Utente': s.utente, 'Data': new Date(s.data).toLocaleDateString('it-IT'), 'Causale': s.causale.toUpperCase(), 'Costo (€)': s.importo }))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Archivio_Spese"); XLSX.writeFile(wb, "Spese_Casa.xlsx"); }
         function formDataToString(rawData) { if (rawData instanceof Date && !isNaN(rawData)) { let anno = rawData.getFullYear(); let mese = String(rawData.getMonth() + 1).padStart(2, '0'); let giorno = String(rawData.getDate()).padStart(2, '0'); return `${anno}-${mese}-${giorno}`; } else if (rawData) { let dateStr = String(rawData).trim(); if (dateStr.includes('/')) { let p = dateStr.split('/'); if (p.length === 3) { if (p[2].length === 4) return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`; if (p[0].length === 4) return `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`; } } else if (dateStr.includes('-')) { let p = dateStr.split('-'); if (p.length === 3 && p[0].length === 4) return dateStr; } } return ""; }
@@ -400,29 +414,28 @@
                         const row = rows[i]; if (!row || row.length < 4) continue; if (i === 0 && (String(row[0]).toLowerCase().includes('utente') || String(row[1]).toLowerCase().includes('data'))) continue; 
                         let utente = String(row[0] || '').trim().toUpperCase(); let rawData = row[1]; let causale = String(row[2] || '').trim(); let importo = parseFloat(row[3]); 
                         if (utente !== 'ENZO' && utente !== 'CLORINDA') continue; if (isNaN(importo) || importo <= 0 || !causale) continue; let dataFormattata = formDataToString(rawData); if (!dataFormattata) continue; 
-                        // Salva nel cloud
                         db.collection("spese").add({ utente: utente, data: dataFormattata, causale: causale, importo: importo });
                         count++; 
                     } 
-                    if (count > 0) alert(`Importazione avviata per ${count} movimenti! (Appariranno a breve)`); 
+                    if (count > 0) alert(`Importazione avviata per ${count} movimenti!`); 
                 } catch (err) { alert("Errore."); } event.target.value = ''; 
             }; reader.readAsArrayBuffer(file); 
         }
 
         // ==========================================
-        // STATISTICHE
+        // REPORT / GRAPHICS
         // ==========================================
         function generaStatistiche() {
             const start = document.getElementById('stat-start').value; const end = document.getElementById('stat-end').value; const speseFiltrate = spese.filter(s => s.data >= start && s.data <= end);
             let totEnzo = 0; let totClorinda = 0; let mappaCategorie = {};
             speseFiltrate.forEach(s => { if(s.utente === 'ENZO') totEnzo += s.importo; if(s.utente === 'CLORINDA') totClorinda += s.importo; let cat = categorizzaSpesa(s.causale); if(mappaCategorie[cat]) mappaCategorie[cat] += s.importo; else mappaCategorie[cat] = s.importo; });
             const totaleGenerale = totEnzo + totClorinda;
-            document.getElementById('rep-totale').innerText = `€ ${totaleGenerale.toFixed(0)}`; document.getElementById('rep-enzo').innerText = `€ ${totEnzo.toFixed(0)}`; document.getElementById('rep-clorinda').innerText = `€ ${totClorinda.toFixed(0)}`;
+            document.getElementById('rep-totale').innerText = `€ ${totaleGenerale.toFixed(2)}`; document.getElementById('rep-enzo').innerText = `€ ${totEnzo.toFixed(2)}`; document.getElementById('rep-clorinda').innerText = `€ ${totClorinda.toFixed(2)}`;
             const tbodyCat = document.getElementById('tabella-categorie'); tbodyCat.innerHTML = '';
             if (totaleGenerale === 0) { if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy(); tbodyCat.innerHTML = '<tr><td colspan="2" class="text-center">Nessuna spesa nel periodo.</td></tr>'; return; }
             const categorieOrdinate = Object.entries(mappaCategorie).sort((a, b) => b[1] - a[1]); const etichetteCat = categorieOrdinate.map(item => item[0]); const datiCat = categorieOrdinate.map(item => item[1]);
             const baseColors = [ '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#1abc9c', '#34495e' ];
-            categorieOrdinate.forEach(item => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${item[0]}</td><td><b>€ ${item[1].toFixed(0)}</b></td>`; tbodyCat.appendChild(tr); });
+            categorieOrdinate.forEach(item => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${item[0]}</td><td><b>€ ${item[1].toFixed(2)}</b></td>`; tbodyCat.appendChild(tr); });
             const ctxCat = document.getElementById('catChart').getContext('2d'); if(chartCategorie) chartCategorie.destroy(); chartCategorie = new Chart(ctxCat, { type: 'doughnut', data: { labels: etichetteCat, datasets: [{ data: datiCat, backgroundColor: baseColors.slice(0, etichetteCat.length), borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
             const ctxUser = document.getElementById('userChart').getContext('2d'); if(chartUtenti) chartUtenti.destroy(); chartUtenti = new Chart(ctxUser, { type: 'bar', data: { labels: ['ENZO', 'CLORINDA'], datasets: [{ label: '€', data: [totEnzo, totClorinda], backgroundColor: ['#ffb6c1', '#add8e6'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
         }
