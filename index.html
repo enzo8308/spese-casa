@@ -15,6 +15,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <style>
@@ -242,7 +243,7 @@
                             <th>Categoria</th>
                             <th>Tot (€)</th>
                             <th style="color:#e84393;">Di cui ENZO</th>
-                            <th style="color:#0984e3;">Di cui CLO</th>
+                            <th style="color:#0984e3;">Di cui CLÒ</th>
                         </tr>
                     </thead>
                     <tbody id="tabella-categorie"></tbody>
@@ -265,6 +266,9 @@
     </div>
 
     <script>
+        // Registrazione del plugin DataLabels
+        Chart.register(ChartDataLabels);
+
         // ==========================================
         // CONFIGURAZIONE FIREBASE
         // ==========================================
@@ -505,7 +509,7 @@
             const container = document.getElementById('conf-categorie-container');
             if(!container) return;
             
-            // Salva selezioni correnti per non sovrascriverle durante l'aggiornamento real-time
+            // Salva selezioni correnti
             let selected = [];
             container.querySelectorAll('input:checked').forEach(cb => selected.push(cb.value));
             const isFirstLoad = container.innerHTML === '';
@@ -543,10 +547,8 @@
             const annoB = document.getElementById('conf-anno-b').value;
             const meseB = document.getElementById('conf-mese-b').value;
 
-            // Prendi le categorie selezionate dalle checkbox
             const catSelezionate = Array.from(document.querySelectorAll('.cat-filter-cb:checked')).map(cb => cb.value);
 
-            // Filtra e Somma
             const calcolaTotale = (anno, mese) => {
                 let tot = 0;
                 spese.forEach(s => {
@@ -565,14 +567,12 @@
             const totA = calcolaTotale(annoA, meseA);
             const totB = calcolaTotale(annoB, meseB);
 
-            // Genera le etichette per il grafico (es: "Gennaio 2026" o "Anno 2026")
             const selMeseA = document.getElementById('conf-mese-a');
             const labelA = meseA === 'ALL' ? `Anno ${annoA}` : `${selMeseA.options[selMeseA.selectedIndex].text} ${annoA}`;
             
             const selMeseB = document.getElementById('conf-mese-b');
             const labelB = meseB === 'ALL' ? `Anno ${annoB}` : `${selMeseB.options[selMeseB.selectedIndex].text} ${annoB}`;
 
-            // Disegna il grafico
             const ctxComp = document.getElementById('compareChart').getContext('2d');
             if(chartConfronto) chartConfronto.destroy();
             chartConfronto = new Chart(ctxComp, {
@@ -586,7 +586,16 @@
                         borderRadius: 4
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    layout: { padding: { top: 25 } }, 
+                    plugins: { 
+                        legend: { display: false },
+                        datalabels: { anchor: 'end', align: 'end', formatter: v => '€ ' + v.toFixed(0), font: { weight: 'bold', size: 12 } }
+                    }, 
+                    scales: { y: { beginAtZero: true } } 
+                }
             });
         }
 
@@ -597,11 +606,9 @@
             
             let totEnzo = 0; let totClorinda = 0; 
             
-            // Oggetti per i raggruppamenti
             let statsCategorie = {}; 
             let andamentoMensile = {}; 
 
-            // 1. ELABORAZIONE SPESE FILTRATE
             speseFiltrate.forEach(s => { 
                 let imp = s.importo;
                 let chi = s.utente;
@@ -609,14 +616,12 @@
                 if(chi === 'ENZO') totEnzo += imp; 
                 if(chi === 'CLORINDA') totClorinda += imp; 
                 
-                // Tabella Categorie Dettagliata
                 let cat = categorizzaSpesa(s.causale, s); 
                 if(!statsCategorie[cat]) statsCategorie[cat] = { totale: 0, enzo: 0, clorinda: 0 };
                 statsCategorie[cat].totale += imp;
                 if(chi === 'ENZO') statsCategorie[cat].enzo += imp;
                 if(chi === 'CLORINDA') statsCategorie[cat].clorinda += imp;
 
-                // Andamento Mensile
                 let mese = s.data.substring(0, 7);
                 if(!andamentoMensile[mese]) andamentoMensile[mese] = { totale: 0, enzo: 0, clorinda: 0 };
                 andamentoMensile[mese].totale += imp;
@@ -624,13 +629,11 @@
                 if(chi === 'CLORINDA') andamentoMensile[mese].clorinda += imp;
             });
 
-            // Aggiornamento Box Header
             const totaleGenerale = totEnzo + totClorinda;
             document.getElementById('rep-totale').innerText = `€ ${totaleGenerale.toFixed(2)}`; 
             document.getElementById('rep-enzo').innerText = `€ ${totEnzo.toFixed(2)}`; 
             document.getElementById('rep-clorinda').innerText = `€ ${totClorinda.toFixed(2)}`;
             
-            // Generazione Tabella Categorie
             const tbodyCat = document.getElementById('tabella-categorie'); tbodyCat.innerHTML = '';
             if (totaleGenerale === 0) { 
                 if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy(); if(chartTrend) chartTrend.destroy();
@@ -646,28 +649,33 @@
                 tbodyCat.appendChild(tr); 
             });
 
-            // 3. DISEGNO GRAFICI PRINCIPALI
             const baseColors = [ '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#1abc9c', '#34495e', '#ff9ff3', '#00d2d3' ];
             
             if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy(); if(chartTrend) chartTrend.destroy();
 
-            // Grafico a Ciambella
             const ctxCat = document.getElementById('catChart').getContext('2d'); 
             chartCategorie = new Chart(ctxCat, { 
                 type: 'doughnut', 
                 data: { labels: categorieOrdinate.map(i => i[0]), datasets: [{ data: categorieOrdinate.map(i => i[1].totale), backgroundColor: baseColors, borderWidth: 2 }] }, 
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: { display: false } } } 
             });
             
-            // Grafico a Barre
             const ctxUser = document.getElementById('userChart').getContext('2d'); 
             chartUtenti = new Chart(ctxUser, { 
                 type: 'bar', 
                 data: { labels: ['ENZO', 'CLORINDA'], datasets: [{ label: '€', data: [totEnzo, totClorinda], backgroundColor: ['#ffb6c1', '#add8e6'] }] }, 
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    layout: { padding: { top: 25 } }, 
+                    plugins: { 
+                        legend: { display: false },
+                        datalabels: { anchor: 'end', align: 'end', formatter: v => '€ ' + v.toFixed(0), font: { weight: 'bold', size: 12 } }
+                    }, 
+                    scales: { y: { beginAtZero: true } } 
+                } 
             });
 
-            // Grafico Andamento Mensile
             const mesiOrdinati = Object.keys(andamentoMensile).sort();
             const ctxTrend = document.getElementById('trendChart').getContext('2d');
             chartTrend = new Chart(ctxTrend, {
@@ -677,13 +685,13 @@
                     datasets: [
                         { label: 'Totale', data: mesiOrdinati.map(m => andamentoMensile[m].totale), borderColor: '#2c3e50', backgroundColor: '#2c3e50', tension: 0.3, borderWidth: 3 },
                         { label: 'Enzo', data: mesiOrdinati.map(m => andamentoMensile[m].enzo), borderColor: '#e84393', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, borderDash: [5, 5] },
-                        { label: 'Clo', data: mesiOrdinati.map(m => andamentoMensile[m].clorinda), borderColor: '#0984e3', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, borderDash: [5, 5] }
+                        // Modificato Clo in Clò
+                        { label: 'Clò', data: mesiOrdinati.map(m => andamentoMensile[m].clorinda), borderColor: '#0984e3', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, borderDash: [5, 5] }
                     ]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: { display: false } } }
             });
             
-            // Genera anche il grafico di confronto con le impostazioni correnti
             aggiornaGraficoConfronto();
         }
     </script>
