@@ -170,23 +170,50 @@
         </div>
 
         <div id="view-statistiche" class="hidden card">
-            <h3 style="margin-top:0;">Reportistica</h3>
+            <h3 style="margin-top:0;">Reportistica & Confronti</h3>
+            
             <div class="filters">
                 <div><label>Dal: </label><input type="date" id="stat-start"></div>
                 <div><label>Al: </label><input type="date" id="stat-end"></div>
-                <button class="btn" onclick="generaStatistiche()" style="width:100%">Aggiorna</button>
+                <button class="btn" onclick="generaStatistiche()" style="width:100%">Aggiorna Dati</button>
             </div>
+            
             <div class="report-header">
                 <div class="stat-card bg-total"><h4>Totale Speso</h4><p id="rep-totale">€ 0</p></div>
                 <div class="stat-card bg-enzo"><h4>Quota ENZO</h4><p id="rep-enzo">€ 0</p></div>
                 <div class="stat-card bg-clorinda"><h4>Quota CLORINDA</h4><p id="rep-clorinda">€ 0</p></div>
             </div>
-            <div class="charts-wrapper">
+            
+            <div class="charts-wrapper" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
                 <div class="chart-box"><div class="chart-container"><canvas id="catChart"></canvas></div></div>
                 <div class="chart-box"><div class="chart-container"><canvas id="userChart"></canvas></div></div>
             </div>
-            <div class="table-wrapper" style="margin-top:20px;">
-                <table><thead><tr><th>Categoria</th><th>Tot (€)</th></tr></thead><tbody id="tabella-categorie"></tbody></table>
+
+            <div class="charts-wrapper" style="grid-template-columns: 1fr; margin-top: 20px;">
+                <div class="chart-box">
+                    <h4 style="text-align:center; margin-top:0; color:var(--primary);">Andamento Mensile (Periodo Selezionato)</h4>
+                    <div class="chart-container"><canvas id="trendChart"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h4 style="text-align:center; margin-top:0; color:var(--primary);">Confronto Annuale Globale</h4>
+                    <p style="font-size:11px; text-align:center; margin-top:-10px;">(Include tutto l'archivio storico)</p>
+                    <div class="chart-container"><canvas id="yearChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="table-wrapper" style="margin-top:25px;">
+                <h4 style="margin-bottom: 10px; color:var(--primary);">Dettaglio per Categoria</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Categoria</th>
+                            <th>Tot (€)</th>
+                            <th style="color:#e84393;">Di cui ENZO</th>
+                            <th style="color:#0984e3;">Di cui CLO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabella-categorie"></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -194,7 +221,7 @@
     <div id="modal-cambio-categoria" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 15px;">
         <div class="card" style="width: 100%; max-width: 400px; margin: 0; max-height: 95vh; overflow-y: auto;">
             <h3 style="margin-top: 0; color: var(--primary);">Forza Categoria Spesa</h3>
-            <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Sposta la spesa selezionata in un'altra categoria online o creane una al volo:</p>
+            <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Sposta la spesa in un'altra categoria online o creane una al volo:</p>
             <div id="opzioni-categorie-recat" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px;"></div>
             <div style="border-top: 1px solid #eee; padding-top: 15px; display: flex; gap: 5px; margin-bottom: 15px;">
                 <input type="text" id="nuova-cat-forzata-nome" placeholder="Nuova categoria al volo..." style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
@@ -228,10 +255,12 @@
         // ==========================================
         let users = JSON.parse(localStorage.getItem('usersCasa')) || { 'ENZO': '1234', 'CLORINDA': '1234' };
         let spese = [];
-        let mappaCategorie = {}; // Caricata online in tempo reale dal Cloud
+        let mappaCategorie = {}; 
         let currentUser = null; 
         let idSpesaSelezionataRecat = null;
-        let chartCategorie = null; let chartUtenti = null;
+        
+        let chartCategorie = null; let chartUtenti = null; let chartTrend = null; let chartAnni = null;
+        
         let sortConfig = { key: 'data', direction: 'desc' };
         let anniEspansi = new Set(); let primaAperturaArchivio = true;
 
@@ -242,15 +271,13 @@
         document.getElementById('stat-end').value = todayStr;
 
         // ==========================================
-        // LOGICA DI SINCRONIZZAZIONE REAL-TIME (CLOUD CLOUD CLOUD)
+        // LOGICA DI SINCRONIZZAZIONE
         // ==========================================
         function initRealTimeSync() {
             if(!db) return alert("Firebase non configurato!");
             
-            // 1. SINCRONIZZAZIONE DI CATEGORIE E PAROLE CHIAVE
             db.collection("categorie").onSnapshot((snapshot) => {
                 if (snapshot.empty) {
-                    // Generazione iniziale del database Categorie online con le tue nuove preferenze
                     const defaultCategorie = {
                         '🎓 Figli & Scuola': ['scuola', 'retta', 'asilo', 'mensa', 'libri', 'zaino', 'gb', 'figli', 'gc', 'gabriele', 'giancarlo'],
                         '🛒 Alimentari': ['spesa', 'supermercato', 'decò', 'conad', 'coop', 'esselunga', 'pane', 'macellaio', 'frutta'],
@@ -265,9 +292,7 @@
                     }
                 } else {
                     mappaCategorie = {};
-                    snapshot.forEach(doc => {
-                        mappaCategorie[doc.id] = doc.data().keywords || [];
-                    });
+                    snapshot.forEach(doc => { mappaCategorie[doc.id] = doc.data().keywords || []; });
                     if(!document.getElementById('view-archivio').classList.contains('hidden')) caricaArchivio();
                     if(!document.getElementById('view-statistiche').classList.contains('hidden')) generaStatistiche();
                     if(!document.getElementById('view-gestione-categorie').classList.contains('hidden')) renderingGestioneCategorie();
@@ -275,24 +300,17 @@
                 }
             });
 
-            // 2. SINCRONIZZAZIONE DEI MOVIMENTI DI SPESA
             db.collection("spese").onSnapshot((snapshot) => {
                 spese = [];
-                snapshot.forEach((doc) => {
-                    spese.push({ id: doc.id, ...doc.data() });
-                });
-                
+                snapshot.forEach((doc) => { spese.push({ id: doc.id, ...doc.data() }); });
                 if(!document.getElementById('view-archivio').classList.contains('hidden')) caricaArchivio();
                 if(!document.getElementById('view-statistiche').classList.contains('hidden')) generaStatistiche();
                 aggiornaWidgetDelta();
             });
         }
 
-        // Calcola la categoria controllando prima se è stata forzata a mano sul database cloud
         function categorizzaSpesa(causale, spesaDoc) {
-            if (spesaDoc && spesaDoc.categoria) {
-                return spesaDoc.categoria;
-            }
+            if (spesaDoc && spesaDoc.categoria) return spesaDoc.categoria;
             const testo = causale.toLowerCase();
             for (const [categoria, keywords] of Object.entries(mappaCategorie)) { 
                 if (keywords.some(kw => testo.includes(kw.toLowerCase()))) return categoria; 
@@ -303,12 +321,9 @@
         function login() {
             const user = document.getElementById('login-user').value; const pass = document.getElementById('login-password').value;
             if (users[user] === pass) { 
-                currentUser = user; 
-                document.getElementById('current-user-display').innerText = currentUser; 
-                document.getElementById('login-screen').classList.add('hidden'); 
-                document.getElementById('app-screen').classList.remove('hidden'); 
-                navigate('home'); 
-                initRealTimeSync();
+                currentUser = user; document.getElementById('current-user-display').innerText = currentUser; 
+                document.getElementById('login-screen').classList.add('hidden'); document.getElementById('app-screen').classList.remove('hidden'); 
+                navigate('home'); initRealTimeSync();
             } else { alert('Password errata!'); }
         }
         
@@ -316,229 +331,75 @@
         
         function navigate(viewName) { 
             const views = ['home', 'inserimento', 'archivio', 'statistiche', 'modifica', 'cambio-password', 'gestione-categorie'];
-            views.forEach(v => {
-                const el = document.getElementById('view-' + v);
-                if(el) el.classList.add('hidden');
-            }); 
-            
-            const targetEl = document.getElementById('view-' + viewName);
-            if(targetEl) targetEl.classList.remove('hidden');
-            
+            views.forEach(v => { const el = document.getElementById('view-' + v); if(el) el.classList.add('hidden'); }); 
+            const targetEl = document.getElementById('view-' + viewName); if(targetEl) targetEl.classList.remove('hidden');
             if(viewName === 'archivio') caricaArchivio(); 
             if(viewName === 'statistiche') generaStatistiche(); 
             if(viewName === 'gestione-categorie') renderingGestioneCategorie();
-            
-            const menu = document.getElementById('settings-menu');
-            if(menu) menu.classList.add('hidden');
+            const menu = document.getElementById('settings-menu'); if(menu) menu.classList.add('hidden');
         }
 
-        function toggleMenu() {
-            const menu = document.getElementById('settings-menu');
-            if(menu) menu.classList.toggle('hidden');
-        }
+        function toggleMenu() { const menu = document.getElementById('settings-menu'); if(menu) menu.classList.toggle('hidden'); }
 
         // ==========================================
-        // SEZIONE GESTIONE INTERFACCIA CATEGORIE 
+        // GESTIONE CATEGORIE
         // ==========================================
-        function apriGestioneCategorie() {
-            navigate('gestione-categorie');
-        }
-
+        function apriGestioneCategorie() { navigate('gestione-categorie'); }
         function renderingGestioneCategorie() {
-            const container = document.getElementById('lista-categorie-manager');
-            if(!container) return;
-            container.innerHTML = '';
-            
-            const elencoCategorie = Object.keys(mappaCategorie);
-            elencoCategorie.forEach((cat, index) => {
+            const container = document.getElementById('lista-categorie-manager'); if(!container) return; container.innerHTML = '';
+            Object.keys(mappaCategorie).forEach((cat, index) => {
                 const kws = mappaCategorie[cat] || [];
                 const catBox = document.createElement('div');
-                catBox.style.border = "1px solid #ddd";
-                catBox.style.borderRadius = "8px";
-                catBox.style.padding = "12px";
-                catBox.style.marginBottom = "10px";
-                catBox.style.background = "#f9f9f9";
-                
-                let kwsHtml = kws.map(kw => `
-                    <span style="display: inline-flex; align-items: center; background: #e0e0e0; padding: 4px 8px; border-radius: 4px; margin: 3px; font-size: 13px; font-weight: bold;">
-                        ${kw} <b style="margin-left: 6px; cursor: pointer; color: var(--danger); font-size: 14px;" onclick="rimuoviParolaChiave('${cat}', '${kw}')">×</b>
-                    </span>
-                `).join('');
-                
+                catBox.style.cssText = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #f9f9f9;";
+                let kwsHtml = kws.map(kw => `<span style="display: inline-flex; align-items: center; background: #e0e0e0; padding: 4px 8px; border-radius: 4px; margin: 3px; font-size: 13px; font-weight: bold;">${kw} <b style="margin-left: 6px; cursor: pointer; color: var(--danger); font-size: 14px;" onclick="rimuoviParolaChiave('${cat}', '${kw}')">×</b></span>`).join('');
                 catBox.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <strong style="font-size: 15px; color: var(--primary);">${cat}</strong>
                         <button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px; margin:0;" onclick="eliminaCategoriaIntera('${cat}')">🗑️ Elimina</button>
                     </div>
-                    <div style="margin-bottom: 10px; display: flex; flex-wrap: wrap;">
-                        ${kwsHtml || '<em style="color:#888; font-size:12px;">Nessuna parola chiave associata</em>'}
-                    </div>
-                    <div style="display: flex; gap: 5px;">
-                        <input type="text" id="add-kw-${index}" placeholder="Nuova parola..." style="flex:1; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;">
-                        <button class="btn" style="padding: 6px 12px; font-size: 13px; margin:0; background-color: var(--success);" onclick="aggiungiParolaChiave('${cat}', ${index})">➕ Parola</button>
-                    </div>
+                    <div style="margin-bottom: 10px; display: flex; flex-wrap: wrap;">${kwsHtml || '<em style="color:#888; font-size:12px;">Nessuna parola chiave</em>'}</div>
+                    <div style="display: flex; gap: 5px;"><input type="text" id="add-kw-${index}" placeholder="Nuova parola..." style="flex:1; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;"><button class="btn" style="padding: 6px 12px; font-size: 13px; margin:0; background-color: var(--success);" onclick="aggiungiParolaChiave('${cat}', ${index})">➕</button></div>
                 `;
                 container.appendChild(catBox);
             });
         }
-
-        function aggiungiNuovaCategoria() {
-            const nome = document.getElementById('nuova-cat-nome').value.trim();
-            if(!nome) return alert("Specifica un nome per la categoria!");
-            if(mappaCategorie[nome]) return alert("Questa categoria esiste già!");
-            
-            db.collection("categorie").doc(nome).set({ keywords: [] })
-            .then(() => { document.getElementById('nuova-cat-nome').value = ''; });
-        }
-
-        function eliminaCategoriaIntera(cat) {
-            if(confirm(`Sicuro di eliminare "${cat}" online?\nLe parole chiave verranno eliminate.`)) {
-                db.collection("categorie").doc(cat).delete();
-            }
-        }
-
-        function aggiungiParolaChiave(cat, idx) {
-            const input = document.getElementById(`add-kw-${idx}`);
-            const kw = input.value.trim();
-            if(!kw) return alert("Scrivi una parola!");
-            
-            let attuali = mappaCategorie[cat] || [];
-            if(attuali.map(v => v.toLowerCase()).includes(kw.toLowerCase())) return alert("Esiste già!");
-            
-            attuali.push(kw);
-            db.collection("categorie").doc(cat).update({ keywords: attuali });
-        }
-
-        function rimuoviParolaChiave(cat, kw) {
-            let attuali = mappaCategorie[cat] || [];
-            let filtrate = attuali.filter(item => item !== kw);
-            db.collection("categorie").doc(cat).update({ keywords: filtrate });
-        }
+        function aggiungiNuovaCategoria() { const nome = document.getElementById('nuova-cat-nome').value.trim(); if(!nome) return alert("Specifica un nome!"); if(mappaCategorie[nome]) return alert("Esiste già!"); db.collection("categorie").doc(nome).set({ keywords: [] }).then(() => { document.getElementById('nuova-cat-nome').value = ''; }); }
+        function eliminaCategoriaIntera(cat) { if(confirm(`Sicuro di eliminare "${cat}" online?`)) { db.collection("categorie").doc(cat).delete(); } }
+        function aggiungiParolaChiave(cat, idx) { const kw = document.getElementById(`add-kw-${idx}`).value.trim(); if(!kw) return alert("Scrivi una parola!"); let attuali = mappaCategorie[cat] || []; if(attuali.map(v => v.toLowerCase()).includes(kw.toLowerCase())) return alert("Esiste già!"); attuali.push(kw); db.collection("categorie").doc(cat).update({ keywords: attuali }); }
+        function rimuoviParolaChiave(cat, kw) { let attuali = mappaCategorie[cat] || []; let filtrate = attuali.filter(item => item !== kw); db.collection("categorie").doc(cat).update({ keywords: filtrate }); }
 
         // ==========================================
-        // GESTIONE PASSSWORD INTEGRATA
+        // GESTIONE PASSWORD
         // ==========================================
-        function apriCambioPassword() {
-            document.getElementById('settings-menu').classList.add('hidden');
-            document.getElementById('pass-attuale').value = '';
-            document.getElementById('pass-nuova').value = '';
-            document.getElementById('pass-conferma').value = '';
-            navigate('cambio-password');
-        }
-
-        function salvaNuovaPassword() {
-            const attuale = document.getElementById('pass-attuale').value;
-            const nuova = document.getElementById('pass-nuova').value;
-            const conferma = document.getElementById('pass-conferma').value;
-
-            if (!attuale || !nuova || !conferma) return alert("Compila tutti i campi!");
-            if (attuale !== users[currentUser]) return alert("La password attuale è errata!");
-            if (nuova !== conferma) return alert("Le nuove password non coincidono!");
-            if (nuova.length < 4) return alert("La nuova password deve avere almeno 4 caratteri!");
-
-            users[currentUser] = nuova.trim();
-            localStorage.setItem('usersCasa', JSON.stringify(users));
-            alert("Password aggiornata con successo!");
-            navigate('home');
-        }
+        function apriCambioPassword() { document.getElementById('settings-menu').classList.add('hidden'); document.getElementById('pass-attuale').value = ''; document.getElementById('pass-nuova').value = ''; document.getElementById('pass-conferma').value = ''; navigate('cambio-password'); }
+        function salvaNuovaPassword() { const attuale = document.getElementById('pass-attuale').value; const nuova = document.getElementById('pass-nuova').value; const conferma = document.getElementById('pass-conferma').value; if (!attuale || !nuova || !conferma) return alert("Compila tutti i campi!"); if (attuale !== users[currentUser]) return alert("Password attuale errata!"); if (nuova !== conferma) return alert("Le password non coincidono!"); if (nuova.length < 4) return alert("Almeno 4 caratteri!"); users[currentUser] = nuova.trim(); localStorage.setItem('usersCasa', JSON.stringify(users)); alert("Aggiornata!"); navigate('home'); }
 
         // ==========================================
-        // OPERAZIONI MOVIMENTI SPESE
+        // DATABASE SPESE
         // ==========================================
-        function salvaSpesa() {
-            const data = document.getElementById('spesa-data').value; const causale = document.getElementById('spesa-causale').value.trim(); const importo = parseFloat(document.getElementById('spesa-importo').value);
-            if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Compila i campi.");
-            
-            db.collection("spese").add({
-                utente: currentUser, data: data, causale: causale, importo: importo
-            }).then(() => {
-                document.getElementById('spesa-causale').value = ''; document.getElementById('spesa-importo').value = '';
-                anniEspansi.add(data.substring(0, 4)); alert("Salvata Online!"); navigate('archivio');
-            }).catch(error => alert("Errore connessione: " + error));
-        }
-
-        function eliminaSpesa(id) { 
-            if (confirm("Eliminare dal database online?")) { db.collection("spese").doc(id).delete(); } 
-        }
-
-        function salvaModifica() { 
-            const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); 
-            if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); 
-            if (confirm("Salvare online?")) { db.collection("spese").doc(id).update({ utente, data, causale, importo }).then(() => navigate('archivio')); } 
-        }
-
-        function svuotaArchivio() { 
-            if (confirm("⚠️ ATTENZIONE ESTREMA!\nVuoi cancellare l'INTERO archivio online di ENZO e CLORINDA?\nTutti i dati verranno persi per sempre per entrambi.")) { 
-                spese.forEach(s => { db.collection("spese").doc(s.id).delete(); });
-                anniEspansi.clear(); alert("Archivio azzerato con successo dal database.");
-            } 
-        }
+        function salvaSpesa() { const data = document.getElementById('spesa-data').value; const causale = document.getElementById('spesa-causale').value.trim(); const importo = parseFloat(document.getElementById('spesa-importo').value); if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Compila i campi."); db.collection("spese").add({ utente: currentUser, data: data, causale: causale, importo: importo }).then(() => { document.getElementById('spesa-causale').value = ''; document.getElementById('spesa-importo').value = ''; anniEspansi.add(data.substring(0, 4)); alert("Salvata!"); navigate('archivio'); }).catch(e => alert("Errore: " + e)); }
+        function eliminaSpesa(id) { if (confirm("Eliminare dal database?")) { db.collection("spese").doc(id).delete(); } }
+        function salvaModifica() { const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); if (confirm("Salvare?")) { db.collection("spese").doc(id).update({ utente, data, causale, importo }).then(() => navigate('archivio')); } }
+        function svuotaArchivio() { if (confirm("⚠️ ATTENZIONE ESTREMA!\nCancellare INTERO archivio?")) { spese.forEach(s => { db.collection("spese").doc(s.id).delete(); }); anniEspansi.clear(); alert("Azzerato."); } }
 
         // ==========================================
-        // GESTIONE RECATEGORIZZAZIONE FORZATA (CLICK DX / LONG PRESS)
+        // FORZATURA CATEGORIA
         // ==========================================
-        function apriModalRecat(spesaId) {
-            idSpesaSelezionataRecat = spesaId;
-            const container = document.getElementById('opzioni-categorie-recat');
-            if(!container) return;
-            container.innerHTML = '';
-            
-            const tutteLeCat = Object.keys(mappaCategorie);
-            if (!tutteLeCat.includes('📦 Varie')) tutteLeCat.push('📦 Varie');
-            
-            tutteLeCat.forEach(cat => {
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.style.width = '100%'; btn.style.textAlign = 'left'; btn.style.margin = '0';
-                btn.style.background = '#f1f2f6'; btn.style.color = '#333'; btn.style.border = '1px solid #ddd';
-                btn.innerText = cat;
-                btn.onclick = () => forzaCategoriaSpesa(cat);
-                container.appendChild(btn);
-            });
-            
-            document.getElementById('nuova-cat-forzata-nome').value = '';
-            document.getElementById('modal-cambio-categoria').classList.remove('hidden');
-        }
-
-        function chiudiModalRecat() {
-            document.getElementById('modal-cambio-categoria').classList.add('hidden');
-            idSpesaSelezionataRecat = null;
-        }
-
-        function forzaCategoriaSpesa(categoriaNome) {
-            if(!idSpesaSelezionataRecat) return;
-            db.collection("spese").doc(idSpesaSelezionataRecat).update({
-                categoria: categoriaNome
-            }).then(() => {
-                chiudiModalRecat();
-            }).catch(err => alert("Errore salvataggio: " + err));
-        }
-
-        function creaEForzaNuovaCategoria() {
-            const nomeNuovaCat = document.getElementById('nuova-cat-forzata-nome').value.trim();
-            if(!nomeNuovaCat) return alert("Scrivi il nome della nuova categoria!");
-            
-            if(!mappaCategorie[nomeNuovaCat]) {
-                db.collection("categorie").doc(nomeNuovaCat).set({ keywords: [] })
-                .then(() => { forzaCategoriaSpesa(nomeNuovaCat); })
-                .catch(err => alert("Errore: " + err));
-            } else {
-                forzaCategoriaSpesa(nomeNuovaCat);
-            }
-        }
+        function apriModalRecat(spesaId) { idSpesaSelezionataRecat = spesaId; const container = document.getElementById('opzioni-categorie-recat'); if(!container) return; container.innerHTML = ''; const tutteLeCat = Object.keys(mappaCategorie); if (!tutteLeCat.includes('📦 Varie')) tutteLeCat.push('📦 Varie'); tutteLeCat.forEach(cat => { const btn = document.createElement('button'); btn.className = 'btn'; btn.style.cssText = 'width:100%; text-align:left; margin:0; background:#f1f2f6; color:#333; border:1px solid #ddd;'; btn.innerText = cat; btn.onclick = () => forzaCategoriaSpesa(cat); container.appendChild(btn); }); document.getElementById('nuova-cat-forzata-nome').value = ''; document.getElementById('modal-cambio-categoria').classList.remove('hidden'); }
+        function chiudiModalRecat() { document.getElementById('modal-cambio-categoria').classList.add('hidden'); idSpesaSelezionataRecat = null; }
+        function forzaCategoriaSpesa(catNome) { if(!idSpesaSelezionataRecat) return; db.collection("spese").doc(idSpesaSelezionataRecat).update({ categoria: catNome }).then(() => chiudiModalRecat()); }
+        function creaEForzaNuovaCategoria() { const nome = document.getElementById('nuova-cat-forzata-nome').value.trim(); if(!nome) return; if(!mappaCategorie[nome]) { db.collection("categorie").doc(nome).set({ keywords: [] }).then(() => forzaCategoriaSpesa(nome)); } else { forzaCategoriaSpesa(nome); } }
 
         // ==========================================
-        // INTERFACCIA TABELLA ARCHIVIO (AGGIORNATA CON COLONNA EXTRA)
+        // ARCHIVIO TABELLA
         // ==========================================
         function cambiaOrdinamento(key) { if (sortConfig.key === key) sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc'; else { sortConfig.key = key; sortConfig.direction = (key === 'data' || key === 'importo') ? 'desc' : 'asc'; } caricaArchivio(); }
         function toggleAnno(anno) { if (anniEspansi.has(anno)) anniEspansi.delete(anno); else anniEspansi.add(anno); caricaArchivio(); }
         function apriModifica(id) { const spesa = spese.find(s => String(s.id) === String(id)); if (!spesa) return; document.getElementById('mod-id').value = spesa.id; document.getElementById('mod-utente').value = spesa.utente; document.getElementById('mod-data').value = spesa.data; document.getElementById('mod-causale').value = spesa.causale; document.getElementById('mod-importo').value = spesa.importo; navigate('modifica'); }
 
         function caricaArchivio() {
-            const tbody = document.querySelector('#tabella-spese tbody'); tbody.innerHTML = '';
-            if (spese.length === 0) return;
-            let spesePerAnno = {};
-            spese.forEach(s => { const anno = s.data.substring(0, 4); if (!spesePerAnno[anno]) spesePerAnno[anno] = []; spesePerAnno[anno].push(s); });
+            const tbody = document.querySelector('#tabella-spese tbody'); tbody.innerHTML = ''; if (spese.length === 0) return;
+            let spesePerAnno = {}; spese.forEach(s => { const anno = s.data.substring(0, 4); if (!spesePerAnno[anno]) spesePerAnno[anno] = []; spesePerAnno[anno].push(s); });
             const anniOrdinati = Object.keys(spesePerAnno).sort((a, b) => b - a);
             if (primaAperturaArchivio && anniOrdinati.length > 0) { anniEspansi.add(anniOrdinati[0]); primaAperturaArchivio = false; }
 
@@ -555,97 +416,150 @@
 
                 spesePerAnno[anno].forEach(s => {
                     const tr = document.createElement('tr'); if (!espanso) tr.classList.add('hidden');
-                    const dataFormat = new Date(s.data).toLocaleDateString('it-IT'); 
-                    
                     let catCorrente = categorizzaSpesa(s.causale, s);
-                    
-                    tr.innerHTML = `
-                        <td>${dataFormat}</td>
-                        <td><b>${s.utente.substring(0,3)}</b></td>
-                        <td style="font-weight:700; color:var(--secondary);">${catCorrente}</td>
-                        <td>${s.causale.toUpperCase()}</td>
-                        <td><b>€${s.importo.toFixed(2)}</b></td>
-                        <td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px;" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px;" onclick="eliminaSpesa('${s.id}')">❌</button></td>
-                    `;
-                    
-                    // INTERCETTA TASTO DESTRO (DESKTOP)
-                    tr.addEventListener('contextmenu', (e) => {
-                        e.preventDefault();
-                        apriModalRecat(s.id);
-                    });
-                    
-                    // INTERCETTA PRESSIONE PROLUNGATA (MOBILE)
+                    tr.innerHTML = `<td>${new Date(s.data).toLocaleDateString('it-IT')}</td><td><b>${s.utente.substring(0,3)}</b></td><td style="font-weight:700; color:var(--secondary);">${catCorrente}</td><td>${s.causale.toUpperCase()}</td><td><b>€${s.importo.toFixed(2)}</b></td><td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px;" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px;" onclick="eliminaSpesa('${s.id}')">❌</button></td>`;
+                    tr.addEventListener('contextmenu', (e) => { e.preventDefault(); apriModalRecat(s.id); });
                     let timerLongPress = null;
-                    tr.addEventListener('touchstart', () => {
-                        timerLongPress = setTimeout(() => { apriModalRecat(s.id); }, 600);
-                    }, { passive: true });
-                    tr.addEventListener('touchend', () => clearTimeout(timerLongPress));
-                    tr.addEventListener('touchmove', () => clearTimeout(timerLongPress));
-                    
+                    tr.addEventListener('touchstart', () => { timerLongPress = setTimeout(() => { apriModalRecat(s.id); }, 600); }, { passive: true });
+                    tr.addEventListener('touchend', () => clearTimeout(timerLongPress)); tr.addEventListener('touchmove', () => clearTimeout(timerLongPress));
                     tbody.appendChild(tr);
                 });
             });
         }
 
         function aggiornaWidgetDelta() {
-            const widget = document.getElementById('delta-widget');
-            if(!currentUser) { widget.style.display = 'none'; return; }
-            let spesaEnzo = 0; let spesaClorinda = 0;
-            spese.forEach(s => { if (s.utente === 'ENZO') spesaEnzo += s.importo; else if (s.utente === 'CLORINDA') spesaClorinda += s.importo; });
+            const widget = document.getElementById('delta-widget'); if(!currentUser) { widget.style.display = 'none'; return; }
+            let spesaEnzo = 0; let spesaClorinda = 0; spese.forEach(s => { if (s.utente === 'ENZO') spesaEnzo += s.importo; else if (s.utente === 'CLORINDA') spesaClorinda += s.importo; });
             widget.style.display = 'block';
-            if (spesaEnzo > spesaClorinda) {
-                const diff = (spesaEnzo - spesaClorinda).toFixed(2); widget.style.backgroundColor = 'var(--enzo-color)';
-                widget.innerHTML = `<span class="delta-titolo">CLORINDA DA RITIRARE:</span><span class="delta-cifra">€ ${diff}</span>`;
-            } else if (spesaClorinda > spesaEnzo) {
-                const diff = (spesaClorinda - spesaEnzo).toFixed(2); widget.style.backgroundColor = 'var(--clorinda-color)';
-                widget.innerHTML = `<span class="delta-titolo">ENZO DA RITIRARE:</span><span class="delta-cifra">€ ${diff}</span>`;
-            } else { widget.style.backgroundColor = '#e1b12c'; widget.innerHTML = `<span class="delta-titolo">Stato conti:</span><span class="delta-cifra" style="color:white;">Pari!</span>`; }
+            if (spesaEnzo > spesaClorinda) { widget.style.backgroundColor = 'var(--enzo-color)'; widget.innerHTML = `<span class="delta-titolo">CLORINDA DA RITIRARE:</span><span class="delta-cifra">€ ${(spesaEnzo - spesaClorinda).toFixed(2)}</span>`; } 
+            else if (spesaClorinda > spesaEnzo) { widget.style.backgroundColor = 'var(--clorinda-color)'; widget.innerHTML = `<span class="delta-titolo">ENZO DA RITIRARE:</span><span class="delta-cifra">€ ${(spesaClorinda - spesaEnzo).toFixed(2)}</span>`; } 
+            else { widget.style.backgroundColor = '#e1b12c'; widget.innerHTML = `<span class="delta-titolo">Stato conti:</span><span class="delta-cifra" style="color:white;">Pari!</span>`; }
         }
 
         // ==========================================
         // EXPORT / IMPORT
         // ==========================================
         function esportaExcel() { if (spese.length === 0) return alert("Vuoto."); let speseOrdinate = [...spese].sort((a, b) => new Date(b.data) - new Date(a.data)); const ws = XLSX.utils.json_to_sheet(speseOrdinate.map(s => ({ 'Utente': s.utente, 'Data': new Date(s.data).toLocaleDateString('it-IT'), 'Categoria': categorizzaSpesa(s.causale, s), 'Causale': s.causale.toUpperCase(), 'Costo (€)': s.importo }))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Archivio_Spese"); XLSX.writeFile(wb, "Spese_Casa.xlsx"); }
-        function formDataToString(rawData) { if (rawData instanceof Date && !isNaN(rawData)) { let anno = rawData.getFullYear(); let mese = String(rawData.getMonth() + 1).padStart(2, '0'); let giorno = String(rawData.getDate()).padStart(2, '0'); return `${anno}-${mese}-${giorno}`; } else if (rawData) { let dateStr = String(rawData).trim(); if (dateStr.includes('/')) { let p = dateStr.split('/'); if (p.length === 3) { if (p[2].length === 4) return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`; if (p[0].length === 4) return `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`; } } else if (dateStr.includes('-')) { let p = dateStr.split('-'); if (p.length === 3 && p[0].length === 4) return dateStr; } } return ""; }
-        
-        function importaExcel(event) { 
-            const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); 
-            reader.onload = function(e) { 
-                try { 
-                    const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array', cellDates: true }); const worksheet = workbook.Sheets[workbook.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); let count = 0; 
-                    for (let i = 0; i < rows.length; i++) { 
-                        const row = rows[i]; if (!row || row.length < 4) continue; if (i === 0 && (String(row[0]).toLowerCase().includes('utente') || String(row[1]).toLowerCase().includes('data'))) continue; 
-                        let utente = String(row[0] || '').trim().toUpperCase(); let rawData = row[1]; let causale = String(row[2] || '').trim(); let importo = parseFloat(row[3]); 
-                        if (utente !== 'ENZO' && utente !== 'CLORINDA') continue; if (isNaN(importo) || importo <= 0 || !causale) continue; let dataFormattata = formDataToString(rawData); if (!dataFormattata) continue; 
-                        db.collection("spese").add({ utente: utente, data: dataFormattata, causale: causale, importo: importo });
-                        count++; 
-                    } 
-                    if (count > 0) alert(`Importazione completata online per ${count} movimenti!`); 
-                } catch (err) { alert("Errore."); } event.target.value = ''; 
-            }; reader.readAsArrayBuffer(file); 
-        }
+        function importaExcel(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(e) { try { const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array', cellDates: true }); const worksheet = workbook.Sheets[workbook.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); let count = 0; for (let i = 0; i < rows.length; i++) { const row = rows[i]; if (!row || row.length < 4) continue; if (i === 0 && (String(row[0]).toLowerCase().includes('utente'))) continue; let utente = String(row[0] || '').trim().toUpperCase(); let rawData = row[1]; let causale = String(row[2] || '').trim(); let importo = parseFloat(row[3]); if (utente !== 'ENZO' && utente !== 'CLORINDA') continue; if (isNaN(importo) || importo <= 0 || !causale) continue; let dStr=""; if (rawData instanceof Date && !isNaN(rawData)) { dStr = `${rawData.getFullYear()}-${String(rawData.getMonth() + 1).padStart(2, '0')}-${String(rawData.getDate()).padStart(2, '0')}`; } else { dStr=String(rawData); } db.collection("spese").add({ utente: utente, data: dStr, causale: causale, importo: importo }); count++; } if (count > 0) alert(`Importazione: ${count} movimenti!`); } catch (err) { alert("Errore."); } event.target.value = ''; }; reader.readAsArrayBuffer(file); }
 
         // ==========================================
-        // REPORT / STATISTICHE CON VARIABILE UNICA 
+        // REPORT / STATISTICHE / GRAFICI CONFRONTO
         // ==========================================
         function generaStatistiche() {
-            const start = document.getElementById('stat-start').value; const end = document.getElementById('stat-end').value; const speseFiltrate = spese.filter(s => s.data >= start && s.data <= end);
-            let totEnzo = 0; let totClorinda = 0; let conteggioCategorie = {};
+            const start = document.getElementById('stat-start').value; 
+            const end = document.getElementById('stat-end').value; 
+            const speseFiltrate = spese.filter(s => s.data >= start && s.data <= end);
+            
+            let totEnzo = 0; let totClorinda = 0; 
+            
+            // Oggetti per i raggruppamenti
+            let statsCategorie = {}; 
+            let andamentoMensile = {}; 
+            let andamentoAnnuale = {};
+
+            // 1. ELABORAZIONE SPESE FILTRATE (Per Tabella e Grafico Mensile)
             speseFiltrate.forEach(s => { 
-                if(s.utente === 'ENZO') totEnzo += s.importo; 
-                if(s.utente === 'CLORINDA') totClorinda += s.importo; 
+                let imp = s.importo;
+                let chi = s.utente;
+                
+                if(chi === 'ENZO') totEnzo += imp; 
+                if(chi === 'CLORINDA') totClorinda += imp; 
+                
+                // Raggruppamento per Tabella Categorie (con quote separate)
                 let cat = categorizzaSpesa(s.causale, s); 
-                if(conteggioCategorie[cat]) conteggioCategorie[cat] += s.importo; else conteggioCategorie[cat] = s.importo; 
+                if(!statsCategorie[cat]) statsCategorie[cat] = { totale: 0, enzo: 0, clorinda: 0 };
+                statsCategorie[cat].totale += imp;
+                if(chi === 'ENZO') statsCategorie[cat].enzo += imp;
+                if(chi === 'CLORINDA') statsCategorie[cat].clorinda += imp;
+
+                // Raggruppamento Mensile (es. "2026-05")
+                let mese = s.data.substring(0, 7);
+                if(!andamentoMensile[mese]) andamentoMensile[mese] = { totale: 0, enzo: 0, clorinda: 0 };
+                andamentoMensile[mese].totale += imp;
+                if(chi === 'ENZO') andamentoMensile[mese].enzo += imp;
+                if(chi === 'CLORINDA') andamentoMensile[mese].clorinda += imp;
             });
+
+            // 2. ELABORAZIONE DI TUTTO L'ARCHIVIO (Per Confronto Annuale)
+            spese.forEach(s => {
+                let anno = s.data.substring(0, 4);
+                if(!andamentoAnnuale[anno]) andamentoAnnuale[anno] = 0;
+                andamentoAnnuale[anno] += s.importo;
+            });
+
+            // Aggiornamento Box Header
             const totaleGenerale = totEnzo + totClorinda;
-            document.getElementById('rep-totale').innerText = `€ ${totaleGenerale.toFixed(2)}`; document.getElementById('rep-enzo').innerText = `€ ${totEnzo.toFixed(2)}`; document.getElementById('rep-clorinda').innerText = `€ ${totClorinda.toFixed(2)}`;
+            document.getElementById('rep-totale').innerText = `€ ${totaleGenerale.toFixed(2)}`; 
+            document.getElementById('rep-enzo').innerText = `€ ${totEnzo.toFixed(2)}`; 
+            document.getElementById('rep-clorinda').innerText = `€ ${totClorinda.toFixed(2)}`;
+            
+            // Generazione Tabella Categorie
             const tbodyCat = document.getElementById('tabella-categorie'); tbodyCat.innerHTML = '';
-            if (totaleGenerale === 0) { if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy(); tbodyCat.innerHTML = '<tr><td colspan="2" class="text-center">Nessuna spesa nel periodo.</td></tr>'; return; }
-            const categorieOrdinate = Object.entries(conteggioCategorie).sort((a, b) => b[1] - a[1]); const etichetteCat = categorieOrdinate.map(item => item[0]); const datiCat = categorieOrdinate.map(item => item[1]);
-            const baseColors = [ '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#1abc9c', '#34495e' ];
-            categorieOrdinate.forEach(item => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${item[0]}</td><td><b>€ ${item[1].toFixed(2)}</b></td>`; tbodyCat.appendChild(tr); });
-            const ctxCat = document.getElementById('catChart').getContext('2d'); if(chartCategorie) chartCategorie.destroy(); chartCategorie = new Chart(ctxCat, { type: 'doughnut', data: { labels: etichetteCat, datasets: [{ data: datiCat, backgroundColor: baseColors.slice(0, etichetteCat.length), borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
-            const ctxUser = document.getElementById('userChart').getContext('2d'); if(chartUtenti) chartUtenti.destroy(); chartUtenti = new Chart(ctxUser, { type: 'bar', data: { labels: ['ENZO', 'CLORINDA'], datasets: [{ label: '€', data: [totEnzo, totClorinda], backgroundColor: ['#ffb6c1', '#add8e6'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
+            if (totaleGenerale === 0) { 
+                if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy(); 
+                if(chartTrend) chartTrend.destroy(); if(chartAnni) chartAnni.destroy();
+                tbodyCat.innerHTML = '<tr><td colspan="4" class="text-center">Nessuna spesa nel periodo.</td></tr>'; 
+                return; 
+            }
+            
+            const categorieOrdinate = Object.entries(statsCategorie).sort((a, b) => b[1].totale - a[1].totale);
+            categorieOrdinate.forEach(item => { 
+                const catNome = item[0]; const dati = item[1];
+                const tr = document.createElement('tr'); 
+                tr.innerHTML = `<td>${catNome}</td><td><b>€ ${dati.totale.toFixed(2)}</b></td><td style="color:#e84393;">€ ${dati.enzo.toFixed(2)}</td><td style="color:#0984e3;">€ ${dati.clorinda.toFixed(2)}</td>`; 
+                tbodyCat.appendChild(tr); 
+            });
+
+            // 3. DISEGNO GRAFICI
+            const baseColors = [ '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#1abc9c', '#34495e', '#ff9ff3', '#00d2d3' ];
+            
+            // Distruzione vecchi grafici
+            if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy();
+            if(chartTrend) chartTrend.destroy(); if(chartAnni) chartAnni.destroy();
+
+            // Grafico a Ciambella (Categorie)
+            const ctxCat = document.getElementById('catChart').getContext('2d'); 
+            chartCategorie = new Chart(ctxCat, { 
+                type: 'doughnut', 
+                data: { labels: categorieOrdinate.map(i => i[0]), datasets: [{ data: categorieOrdinate.map(i => i[1].totale), backgroundColor: baseColors, borderWidth: 2 }] }, 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } 
+            });
+            
+            // Grafico a Barre (Utenti)
+            const ctxUser = document.getElementById('userChart').getContext('2d'); 
+            chartUtenti = new Chart(ctxUser, { 
+                type: 'bar', 
+                data: { labels: ['ENZO', 'CLORINDA'], datasets: [{ label: '€', data: [totEnzo, totClorinda], backgroundColor: ['#ffb6c1', '#add8e6'] }] }, 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } 
+            });
+
+            // Grafico Andamento Mensile (Linee)
+            const mesiOrdinati = Object.keys(andamentoMensile).sort();
+            const ctxTrend = document.getElementById('trendChart').getContext('2d');
+            chartTrend = new Chart(ctxTrend, {
+                type: 'line',
+                data: {
+                    labels: mesiOrdinati,
+                    datasets: [
+                        { label: 'Totale Mensile', data: mesiOrdinati.map(m => andamentoMensile[m].totale), borderColor: '#2c3e50', backgroundColor: '#2c3e50', tension: 0.3, borderWidth: 3 },
+                        { label: 'Enzo', data: mesiOrdinati.map(m => andamentoMensile[m].enzo), borderColor: '#e84393', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, borderDash: [5, 5] },
+                        { label: 'Clorinda', data: mesiOrdinati.map(m => andamentoMensile[m].clorinda), borderColor: '#0984e3', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, borderDash: [5, 5] }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+
+            // Grafico Confronto Annuale (Barre Storiche)
+            const anniOrdinati = Object.keys(andamentoAnnuale).sort();
+            const ctxAnni = document.getElementById('yearChart').getContext('2d');
+            chartAnni = new Chart(ctxAnni, {
+                type: 'bar',
+                data: {
+                    labels: anniOrdinati,
+                    datasets: [{ label: 'Totale Speso nell\'Anno (€)', data: anniOrdinati.map(a => andamentoAnnuale[a]), backgroundColor: '#2ecc71', borderRadius: 4 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            });
         }
     </script>
 </body>
