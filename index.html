@@ -231,7 +231,7 @@
             });
         }
 
-        function categorizzaSpesa(causale) {
+	function categorizzaSpesa(causale) {
             const testo = causale.toLowerCase();
             const categorie = {
                 '🎓 Figli & Scuola': ['scuola', 'retta', 'asilo', 'mensa', 'libri', 'zaino', 'gb', 'figli'],
@@ -241,7 +241,9 @@
                 '💊 Salute': ['farmacia', 'medico', 'pediatra', 'dentista', 'medicina', 'ticket'],
                 '🍕 Svago': ['pizza', 'ristorante', 'sushi', 'cinema', 'bar', 'vacanza', 'regalo', 'abbigliamento']
             };
-            for (const [categoria, keywords] of Object.entries(categorie)) { if (keywords.some(kw => testo.includes(kw))) return category; }
+            for (const [categoria, keywords] of Object.entries(categorie)) { 
+                if (keywords.some(kw => testo.includes(kw))) return categoria; 
+            }
             return '📦 Varie';
         }
 
