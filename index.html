@@ -19,7 +19,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <style>
-        :root { --primary: #2c3e50; --secondary: #34495e; --accent: #3498db; --light: #ecf0f1; --success: #27ae60; --danger: #e74c3c; --enzo-color: #ffb6c1; --clorinda-color: #add8e6; }
+        :root { --primary: #2c3e50; --secondary: #34495e; --accent: #3498db; --light: #ecf0f1; --success: #27ae60; --danger: #e74c3c; --enzo-color: #ffb6c1; --clorinda-color: #add8e6; --warning: #f1c40f; }
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; background-color: #f5f6fa; color: #333; overscroll-behavior-y: none; }
         .container { max-width: 1100px; margin: 0 auto; padding: 15px; padding-top: env(safe-area-inset-top); }
@@ -61,6 +61,8 @@
         .cat-checkbox-label { display: flex; align-items: center; background: #fff; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; user-select: none; transition: 0.2s; }
         .cat-checkbox-label:hover { background: #f1f2f6; }
         .cat-checkbox-label input { margin-right: 6px; cursor: pointer; }
+
+        #preview-banner { background-color: #f39c12; color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 10px rgba(243, 156, 18, 0.4); }
 
         /* Ottimizzazione Smartphone */
         @media (max-width: 768px) {
@@ -149,14 +151,30 @@
         </div>
 
         <div id="view-archivio" class="hidden card">
-            <h3 style="margin-top: 0;">Archivio Spese</h3>
-            <p style="font-size: 11px; color: #7f8c8d; margin-top: -10px; margin-bottom: 15px;">💡 Su PC fai <u>tasto destro</u> su una riga, o su smartphone <u>tieni premuto</u> per forzare o inserire una nuova categoria.</p>
-            <div style="display:flex; gap:5px; margin-bottom: 15px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                <h3 style="margin: 0;">Archivio Spese</h3>
+                <button class="btn" style="background-color: #8e44ad; font-size: 12px; padding: 8px 12px; margin: 0;" onclick="apriModalBackup()">🕒 Gestione Restore</button>
+            </div>
+
+            <div id="preview-banner" class="hidden">
+                <span id="preview-text" style="font-size: 15px;">🔍 ANTEPRIMA: Stai visualizzando i dati del backup</span>
+                <span style="font-size: 12px; font-weight: normal;">(In questa modalità le modifiche e le cancellazioni singole sono bloccate)</span>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                    <button class="btn" style="background-color: var(--success); margin:0;" onclick="confermaRipristino()">✅ Conferma Restore</button>
+                    <button class="btn btn-danger" style="margin:0;" onclick="annullaAnteprima()">❌ Annulla e Torna al Presente</button>
+                </div>
+            </div>
+
+            <p style="font-size: 11px; color: #7f8c8d; margin-top: -10px; margin-bottom: 15px;">💡 Su PC fai <u>tasto destro</u> su una riga, o su smartphone <u>tieni premuto</u> per forzare una categoria.</p>
+            
+            <div id="archivio-actions" style="display:flex; gap:5px; margin-bottom: 15px;">
                 <button class="btn" style="flex:1; background-color: var(--success); padding: 12px 5px;" onclick="esportaExcel()">📥 Export</button>
                 <button class="btn" style="flex:1; background-color: #e67e22; padding: 12px 5px;" onclick="document.getElementById('import-excel-input').click()">📤 Import</button>
                 <button class="btn btn-danger" style="flex:1; padding: 12px 5px;" onclick="svuotaArchivio()">🗑️ Svuota</button>
                 <input type="file" id="import-excel-input" accept=".xlsx, .xls" style="display:none;" onchange="importaExcel(event)">
             </div>
+            
             <div class="table-wrapper">
                 <table id="tabella-spese">
                     <thead>
@@ -265,6 +283,19 @@
         </div>
     </div>
 
+    <div id="modal-gestione-backup" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 15px;">
+        <div class="card" style="width: 100%; max-width: 450px; margin: 0; max-height: 90vh; display: flex; flex-direction: column;">
+            <h3 style="margin-top: 0; color: #8e44ad;">🕒 Punti di Ripristino</h3>
+            <p style="font-size: 12px; color: #555; margin-bottom: 15px;">I backup vengono creati automaticamente e conservati per un anno. Clicca su un punto per visualizzarne l'anteprima senza rischi.</p>
+            
+            <div id="lista-backups" style="flex: 1; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #f9f9f9; margin-bottom: 15px; display:flex; flex-direction: column; gap: 8px;">
+                <p style="text-align:center; font-size:13px; color:#999;">Caricamento backup in corso...</p>
+            </div>
+
+            <button class="btn btn-danger" style="width: 100%; margin: 0;" onclick="chiudiModalBackup()">Chiudi</button>
+        </div>
+    </div>
+
     <script>
         // Registrazione del plugin DataLabels
         Chart.register(ChartDataLabels);
@@ -288,7 +319,7 @@
         }
 
         // ==========================================
-        // VARIABILI GLOBALI
+        // VARIABILI GLOBALI E STATO ANTEPRIMA
         // ==========================================
         let users = JSON.parse(localStorage.getItem('usersCasa')) || { 'ENZO': '1234', 'CLORINDA': '1234' };
         let spese = [];
@@ -297,9 +328,12 @@
         let idSpesaSelezionataRecat = null;
         
         let chartCategorie = null; let chartUtenti = null; let chartTrend = null; let chartConfronto = null;
-        
         let sortConfig = { key: 'data', direction: 'desc' };
         let anniEspansi = new Set(); let primaAperturaArchivio = true;
+
+        // VARIABILI PER IL RESTORE
+        let isPreviewMode = false;
+        let previewSpese = [];
 
         const todayStr = new Date().toISOString().split('T')[0];
         const firstDayOfYear = new Date().getFullYear() + '-01-01';
@@ -312,6 +346,9 @@
         // ==========================================
         function initRealTimeSync() {
             if(!db) return alert("Firebase non configurato!");
+            
+            // Auto-Backup Giornaliero all'avvio
+            creaBackupAutomaticoGiornaliero();
             
             db.collection("categorie").onSnapshot((snapshot) => {
                 if (snapshot.empty) {
@@ -330,7 +367,7 @@
                 } else {
                     mappaCategorie = {};
                     snapshot.forEach(doc => { mappaCategorie[doc.id] = doc.data().keywords || []; });
-                    popolaFiltriConfronto(); // Aggiorna le checkbox del grafico confronto
+                    popolaFiltriConfronto();
                     if(!document.getElementById('view-archivio').classList.contains('hidden')) caricaArchivio();
                     if(!document.getElementById('view-statistiche').classList.contains('hidden')) generaStatistiche();
                     if(!document.getElementById('view-gestione-categorie').classList.contains('hidden')) renderingGestioneCategorie();
@@ -339,9 +376,12 @@
             });
 
             db.collection("spese").onSnapshot((snapshot) => {
+                // Se siamo in anteprima, ignoriamo gli aggiornamenti in tempo reale per non sovrascrivere l'anteprima
+                if (isPreviewMode) return; 
+                
                 spese = [];
                 snapshot.forEach((doc) => { spese.push({ id: doc.id, ...doc.data() }); });
-                popolaAnniConfronto(); // Aggiorna i menu a tendina degli anni
+                popolaAnniConfronto();
                 if(!document.getElementById('view-archivio').classList.contains('hidden')) caricaArchivio();
                 if(!document.getElementById('view-statistiche').classList.contains('hidden')) generaStatistiche();
                 aggiornaWidgetDelta();
@@ -381,6 +421,158 @@
         function toggleMenu() { const menu = document.getElementById('settings-menu'); if(menu) menu.classList.toggle('hidden'); }
 
         // ==========================================
+        // GESTIONE BACKUP (CREAZIONE E PULIZIA)
+        // ==========================================
+        function creaBackupAutomaticoGiornaliero() {
+            // Controlla se abbiamo già fatto un backup oggi in questa sessione
+            const oggi = new Date().toLocaleDateString('it-IT');
+            const ultimoBk = localStorage.getItem('ultimoBackupAutomatico');
+            if (ultimoBk === oggi) return; // Già fatto oggi
+
+            setTimeout(() => {
+                if (spese.length > 0) {
+                    eseguiSalvataggioBackup("Auto-Backup Avvio App").then(() => {
+                        localStorage.setItem('ultimoBackupAutomatico', oggi);
+                    });
+                }
+            }, 5000); // Ritardo di 5 secondi per permettere il caricamento delle spese dal DB
+        }
+
+        function eseguiSalvataggioBackup(motivo) {
+            return new Promise((resolve) => {
+                if (!spese || spese.length === 0) { resolve(); return; }
+                const now = new Date();
+                const ts = now.getTime();
+                const dateFormattata = now.toLocaleDateString('it-IT') + ' ' + now.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
+                const datiJson = JSON.stringify(spese);
+
+                db.collection("backups").add({
+                    timestamp: ts,
+                    data_creazione: dateFormattata,
+                    motivo: motivo,
+                    dati: datiJson
+                }).then(() => {
+                    pulisciBackupVecchi();
+                    resolve();
+                }).catch(() => resolve()); // Silenzioso in caso di errore
+            });
+        }
+
+        function pulisciBackupVecchi() {
+            const unAnnoFa = Date.now() - (365 * 24 * 60 * 60 * 1000);
+            db.collection("backups").where("timestamp", "<", unAnnoFa).get().then((snapshot) => {
+                snapshot.forEach(doc => doc.ref.delete());
+            });
+        }
+
+        // ==========================================
+        // INTERFACCIA RESTORE E ANTEPRIMA
+        // ==========================================
+        function apriModalBackup() {
+            document.getElementById('modal-gestione-backup').classList.remove('hidden');
+            const lista = document.getElementById('lista-backups');
+            lista.innerHTML = '<p style="text-align:center; font-size:13px; color:#999;">Ricerca backup nel cloud...</p>';
+
+            db.collection("backups").orderBy("timestamp", "desc").get().then((snapshot) => {
+                lista.innerHTML = '';
+                if(snapshot.empty) {
+                    lista.innerHTML = '<p style="text-align:center; font-size:13px; color:#555;">Nessun backup trovato.</p>';
+                    return;
+                }
+                snapshot.forEach(doc => {
+                    const bk = doc.data();
+                    const btn = document.createElement('button');
+                    btn.className = 'btn';
+                    btn.style.cssText = 'width:100%; text-align:left; margin:0; background:#fff; color:#333; border:1px solid #ccc; display:flex; justify-content:space-between; align-items:center;';
+                    btn.innerHTML = `<span><b>Restore al ${bk.data_creazione}</b> <br><small style="color:#777;">${bk.motivo}</small></span> <span style="font-size:18px;">👁️</span>`;
+                    btn.onclick = () => avviaAnteprima(bk.dati, bk.data_creazione);
+                    lista.appendChild(btn);
+                });
+            }).catch(e => {
+                lista.innerHTML = '<p style="text-align:center; font-size:13px; color:var(--danger);">Errore caricamento backup.</p>';
+            });
+        }
+
+        function chiudiModalBackup() {
+            document.getElementById('modal-gestione-backup').classList.add('hidden');
+        }
+
+        function avviaAnteprima(datiJsonString, dataCreazione) {
+            chiudiModalBackup();
+            try {
+                previewSpese = JSON.parse(datiJsonString);
+                isPreviewMode = true;
+                
+                // Mostra il banner giallo
+                document.getElementById('preview-banner').classList.remove('hidden');
+                document.getElementById('archivio-actions').classList.add('hidden');
+                document.getElementById('preview-text').innerHTML = `🔍 ANTEPRIMA: Stai visualizzando i dati del backup creato il <b>${dataCreazione}</b>`;
+                
+                caricaArchivio(); // Ricarica la tabella usando i dati dell'anteprima
+            } catch (e) {
+                alert("Errore nella lettura del file di backup.");
+            }
+        }
+
+        function annullaAnteprima() {
+            isPreviewMode = false;
+            previewSpese = [];
+            document.getElementById('preview-banner').classList.add('hidden');
+            document.getElementById('archivio-actions').classList.remove('hidden');
+            caricaArchivio(); // Ricarica la tabella con i dati reali correnti
+        }
+
+        async function confermaRipristino() {
+            if(!confirm("⚠️ ULTIMO AVVISO!\nSei assolutamente sicuro di voler sovrascrivere l'archivio attuale con i dati di questo backup?\nTutti i dati inseriti DOPO questo backup andranno persi.")) return;
+            
+            document.getElementById('preview-banner').innerHTML = `<h4 style="margin:0;">⏳ Ripristino in corso, non chiudere l'app...</h4>`;
+            
+            try {
+                // 1. Facciamo un backup di sicurezza dell'attuale stato prima di sovrascriverlo
+                await eseguiSalvataggioBackup("Pre-Ripristino Sicurezza");
+
+                // 2. Cancelliamo tutto l'archivio corrente
+                for (let s of spese) {
+                    await db.collection("spese").doc(s.id).delete();
+                }
+
+                // 3. Inseriamo i dati del backup
+                for (let bs of previewSpese) {
+                    await db.collection("spese").add({
+                        utente: bs.utente,
+                        data: bs.data,
+                        causale: bs.causale,
+                        importo: bs.importo,
+                        categoria: bs.categoria || '📦 Varie' // Se è un backup vecchio senza categoria, mette varie
+                    });
+                }
+
+                alert("✅ Restore completato con successo!");
+                
+                // Ristabilisce la grafica
+                document.getElementById('preview-banner').innerHTML = `
+                    <span id="preview-text" style="font-size: 15px;">🔍 ANTEPRIMA</span>
+                    <span style="font-size: 12px; font-weight: normal;">(In questa modalità le modifiche e le cancellazioni singole sono bloccate)</span>
+                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                        <button class="btn" style="background-color: var(--success); margin:0;" onclick="confermaRipristino()">✅ Conferma Restore</button>
+                        <button class="btn btn-danger" style="margin:0;" onclick="annullaAnteprima()">❌ Annulla e Torna al Presente</button>
+                    </div>
+                `;
+                
+                isPreviewMode = false;
+                previewSpese = [];
+                document.getElementById('preview-banner').classList.add('hidden');
+                document.getElementById('archivio-actions').classList.remove('hidden');
+                // caricaArchivio() verrà chiamato automaticamente dal listener di Firebase
+
+            } catch (e) {
+                alert("Errore critico durante il ripristino: " + e);
+                // Forza ricaricamento
+                window.location.reload();
+            }
+        }
+
+        // ==========================================
         // GESTIONE CATEGORIE
         // ==========================================
         function apriGestioneCategorie() { navigate('gestione-categorie'); }
@@ -408,23 +600,37 @@
         function rimuoviParolaChiave(cat, kw) { let attuali = mappaCategorie[cat] || []; let filtrate = attuali.filter(item => item !== kw); db.collection("categorie").doc(cat).update({ keywords: filtrate }); }
 
         // ==========================================
-        // GESTIONE PASSWORD
+        // GESTIONE PASSWORD E SPESE
         // ==========================================
         function apriCambioPassword() { document.getElementById('settings-menu').classList.add('hidden'); document.getElementById('pass-attuale').value = ''; document.getElementById('pass-nuova').value = ''; document.getElementById('pass-conferma').value = ''; navigate('cambio-password'); }
         function salvaNuovaPassword() { const attuale = document.getElementById('pass-attuale').value; const nuova = document.getElementById('pass-nuova').value; const conferma = document.getElementById('pass-conferma').value; if (!attuale || !nuova || !conferma) return alert("Compila tutti i campi!"); if (attuale !== users[currentUser]) return alert("Password attuale errata!"); if (nuova !== conferma) return alert("Le password non coincidono!"); if (nuova.length < 4) return alert("Almeno 4 caratteri!"); users[currentUser] = nuova.trim(); localStorage.setItem('usersCasa', JSON.stringify(users)); alert("Aggiornata!"); navigate('home'); }
 
-        // ==========================================
-        // DATABASE SPESE
-        // ==========================================
         function salvaSpesa() { const data = document.getElementById('spesa-data').value; const causale = document.getElementById('spesa-causale').value.trim(); const importo = parseFloat(document.getElementById('spesa-importo').value); if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Compila i campi."); db.collection("spese").add({ utente: currentUser, data: data, causale: causale, importo: importo }).then(() => { document.getElementById('spesa-causale').value = ''; document.getElementById('spesa-importo').value = ''; anniEspansi.add(data.substring(0, 4)); alert("Salvata!"); navigate('archivio'); }).catch(e => alert("Errore: " + e)); }
-        function eliminaSpesa(id) { if (confirm("Eliminare dal database?")) { db.collection("spese").doc(id).delete(); } }
+        function eliminaSpesa(id) { if(isPreviewMode) return alert("Azione bloccata in modalità anteprima."); if (confirm("Eliminare dal database?")) { db.collection("spese").doc(id).delete(); } }
         function salvaModifica() { const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); if (confirm("Salvare?")) { db.collection("spese").doc(id).update({ utente, data, causale, importo }).then(() => navigate('archivio')); } }
-        function svuotaArchivio() { if (confirm("⚠️ ATTENZIONE ESTREMA!\nCancellare INTERO archivio?")) { spese.forEach(s => { db.collection("spese").doc(s.id).delete(); }); anniEspansi.clear(); alert("Azzerato."); } }
+
+        // DOPPIA CONFERMA SVUOTA ARCHIVIO
+        async function svuotaArchivio() { 
+            if (confirm("⚠️ ATTENZIONE ESTREMA!\nVuoi cancellare l'INTERO archivio online?\nTutti i dati andranno persi per sempre!")) { 
+                const sicurezza = prompt("Questa azione è irreversibile.\nScrivi la parola 'CANCELLA' (tutto in maiuscolo) per confermare l'azzeramento totale:");
+                
+                if (sicurezza === "CANCELLA") {
+                    // Crea backup di emergenza poco prima di esplodere tutto
+                    await eseguiSalvataggioBackup("Pre-Azzeramento Manuale");
+
+                    spese.forEach(s => { db.collection("spese").doc(s.id).delete(); }); 
+                    anniEspansi.clear(); 
+                    alert("Archivio azzerato con successo. (È stato creato un backup di emergenza per sicurezza).");
+                } else {
+                    alert("Parola non corretta. Operazione annullata, i dati sono salvi.");
+                }
+            } 
+        }
 
         // ==========================================
         // FORZATURA CATEGORIA
         // ==========================================
-        function apriModalRecat(spesaId) { idSpesaSelezionataRecat = spesaId; const container = document.getElementById('opzioni-categorie-recat'); if(!container) return; container.innerHTML = ''; const tutteLeCat = Object.keys(mappaCategorie); if (!tutteLeCat.includes('📦 Varie')) tutteLeCat.push('📦 Varie'); tutteLeCat.forEach(cat => { const btn = document.createElement('button'); btn.className = 'btn'; btn.style.cssText = 'width:100%; text-align:left; margin:0; background:#f1f2f6; color:#333; border:1px solid #ddd;'; btn.innerText = cat; btn.onclick = () => forzaCategoriaSpesa(cat); container.appendChild(btn); }); document.getElementById('nuova-cat-forzata-nome').value = ''; document.getElementById('modal-cambio-categoria').classList.remove('hidden'); }
+        function apriModalRecat(spesaId) { if(isPreviewMode) return; idSpesaSelezionataRecat = spesaId; const container = document.getElementById('opzioni-categorie-recat'); if(!container) return; container.innerHTML = ''; const tutteLeCat = Object.keys(mappaCategorie); if (!tutteLeCat.includes('📦 Varie')) tutteLeCat.push('📦 Varie'); tutteLeCat.forEach(cat => { const btn = document.createElement('button'); btn.className = 'btn'; btn.style.cssText = 'width:100%; text-align:left; margin:0; background:#f1f2f6; color:#333; border:1px solid #ddd;'; btn.innerText = cat; btn.onclick = () => forzaCategoriaSpesa(cat); container.appendChild(btn); }); document.getElementById('nuova-cat-forzata-nome').value = ''; document.getElementById('modal-cambio-categoria').classList.remove('hidden'); }
         function chiudiModalRecat() { document.getElementById('modal-cambio-categoria').classList.add('hidden'); idSpesaSelezionataRecat = null; }
         function forzaCategoriaSpesa(catNome) { if(!idSpesaSelezionataRecat) return; db.collection("spese").doc(idSpesaSelezionataRecat).update({ categoria: catNome }).then(() => chiudiModalRecat()); }
         function creaEForzaNuovaCategoria() { const nome = document.getElementById('nuova-cat-forzata-nome').value.trim(); if(!nome) return; if(!mappaCategorie[nome]) { db.collection("categorie").doc(nome).set({ keywords: [] }).then(() => forzaCategoriaSpesa(nome)); } else { forzaCategoriaSpesa(nome); } }
@@ -434,11 +640,14 @@
         // ==========================================
         function cambiaOrdinamento(key) { if (sortConfig.key === key) sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc'; else { sortConfig.key = key; sortConfig.direction = (key === 'data' || key === 'importo') ? 'desc' : 'asc'; } caricaArchivio(); }
         function toggleAnno(anno) { if (anniEspansi.has(anno)) anniEspansi.delete(anno); else anniEspansi.add(anno); caricaArchivio(); }
-        function apriModifica(id) { const spesa = spese.find(s => String(s.id) === String(id)); if (!spesa) return; document.getElementById('mod-id').value = spesa.id; document.getElementById('mod-utente').value = spesa.utente; document.getElementById('mod-data').value = spesa.data; document.getElementById('mod-causale').value = spesa.causale; document.getElementById('mod-importo').value = spesa.importo; navigate('modifica'); }
+        function apriModifica(id) { if(isPreviewMode) return alert("Azione bloccata in modalità anteprima."); const dataArray = isPreviewMode ? previewSpese : spese; const spesa = dataArray.find(s => String(s.id) === String(id) || s.id === undefined); if (!spesa) return; document.getElementById('mod-id').value = spesa.id || ''; document.getElementById('mod-utente').value = spesa.utente; document.getElementById('mod-data').value = spesa.data; document.getElementById('mod-causale').value = spesa.causale; document.getElementById('mod-importo').value = spesa.importo; navigate('modifica'); }
 
         function caricaArchivio() {
-            const tbody = document.querySelector('#tabella-spese tbody'); tbody.innerHTML = ''; if (spese.length === 0) return;
-            let spesePerAnno = {}; spese.forEach(s => { const anno = s.data.substring(0, 4); if (!spesePerAnno[anno]) spesePerAnno[anno] = []; spesePerAnno[anno].push(s); });
+            // Decide se leggere i dati reali o l'anteprima
+            const dataToRender = isPreviewMode ? previewSpese : spese;
+
+            const tbody = document.querySelector('#tabella-spese tbody'); tbody.innerHTML = ''; if (dataToRender.length === 0) return;
+            let spesePerAnno = {}; dataToRender.forEach(s => { const anno = s.data.substring(0, 4); if (!spesePerAnno[anno]) spesePerAnno[anno] = []; spesePerAnno[anno].push(s); });
             const anniOrdinati = Object.keys(spesePerAnno).sort((a, b) => b - a);
             if (primaAperturaArchivio && anniOrdinati.length > 0) { anniEspansi.add(anniOrdinati[0]); primaAperturaArchivio = false; }
 
@@ -456,11 +665,18 @@
                 spesePerAnno[anno].forEach(s => {
                     const tr = document.createElement('tr'); if (!espanso) tr.classList.add('hidden');
                     let catCorrente = categorizzaSpesa(s.causale, s);
-                    tr.innerHTML = `<td>${new Date(s.data).toLocaleDateString('it-IT')}</td><td><b>${s.utente.substring(0,3)}</b></td><td style="font-weight:700; color:var(--secondary);">${catCorrente}</td><td>${s.causale.toUpperCase()}</td><td><b>€${s.importo.toFixed(2)}</b></td><td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px;" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px;" onclick="eliminaSpesa('${s.id}')">❌</button></td>`;
-                    tr.addEventListener('contextmenu', (e) => { e.preventDefault(); apriModalRecat(s.id); });
-                    let timerLongPress = null;
-                    tr.addEventListener('touchstart', () => { timerLongPress = setTimeout(() => { apriModalRecat(s.id); }, 600); }, { passive: true });
-                    tr.addEventListener('touchend', () => clearTimeout(timerLongPress)); tr.addEventListener('touchmove', () => clearTimeout(timerLongPress));
+                    
+                    // Se siamo in anteprima, disabilitiamo i tasti graficamente
+                    const btnStyle = isPreviewMode ? "opacity:0.5; cursor:not-allowed;" : "";
+
+                    tr.innerHTML = `<td>${new Date(s.data).toLocaleDateString('it-IT')}</td><td><b>${s.utente.substring(0,3)}</b></td><td style="font-weight:700; color:var(--secondary);">${catCorrente}</td><td>${s.causale.toUpperCase()}</td><td><b>€${s.importo.toFixed(2)}</b></td><td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px; ${btnStyle}" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px; ${btnStyle}" onclick="eliminaSpesa('${s.id}')">❌</button></td>`;
+                    
+                    if (!isPreviewMode) {
+                        tr.addEventListener('contextmenu', (e) => { e.preventDefault(); apriModalRecat(s.id); });
+                        let timerLongPress = null;
+                        tr.addEventListener('touchstart', () => { timerLongPress = setTimeout(() => { apriModalRecat(s.id); }, 600); }, { passive: true });
+                        tr.addEventListener('touchend', () => clearTimeout(timerLongPress)); tr.addEventListener('touchmove', () => clearTimeout(timerLongPress));
+                    }
                     tbody.appendChild(tr);
                 });
             });
@@ -484,7 +700,6 @@
         // ==========================================
         // REPORT / STATISTICHE E CONFRONTI
         // ==========================================
-        
         function popolaAnniConfronto() {
             let anni = new Set([new Date().getFullYear().toString()]);
             spese.forEach(s => anni.add(s.data.substring(0,4)));
@@ -593,7 +808,7 @@
                         legend: { display: false },
                         datalabels: { 
                             color: '#ffffff',
-                            textStrokeColor: 'rgba(0,0,0,0.4)', // Bordino scuro per leggibilità
+                            textStrokeColor: 'rgba(0,0,0,0.4)',
                             textStrokeWidth: 2,
                             anchor: 'end', 
                             align: 'start', 
@@ -672,14 +887,14 @@
                         legend: { position: 'bottom' }, 
                         datalabels: { 
                             color: '#ffffff',
-                            textStrokeColor: 'rgba(0,0,0,0.5)', // Bordino scuro
+                            textStrokeColor: 'rgba(0,0,0,0.5)', 
                             textStrokeWidth: 2,
                             font: { weight: 'bold', size: 12 },
                             formatter: (value, context) => {
                                 let dataArr = context.chart.data.datasets[0].data;
                                 let sum = dataArr.reduce((a, b) => a + b, 0);
                                 let pct = (value * 100 / sum);
-                                if (pct < 4) return ''; // Nasconde etichetta se lo spicchio è molto piccolo (es. < 4%)
+                                if (pct < 4) return ''; 
                                 return pct.toFixed(1) + '%';
                             }
                         } 
@@ -699,7 +914,7 @@
                         legend: { display: false },
                         datalabels: { 
                             color: '#ffffff',
-                            textStrokeColor: 'rgba(0,0,0,0.4)', // Bordino scuro
+                            textStrokeColor: 'rgba(0,0,0,0.4)',
                             textStrokeWidth: 2,
                             anchor: 'end', 
                             align: 'start', 
