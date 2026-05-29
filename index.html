@@ -83,7 +83,8 @@
                 </h3>
                 
                 <div id="settings-menu" class="hidden" style="position: absolute; top: 35px; left: 0; background: white; color: #333; padding: 12px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 1px solid #ddd; z-index: 100;">
-                    <div onclick="apriCambioPassword()" style="cursor:pointer; font-size: 14px; font-weight: bold; white-space: nowrap;">🔑 Cambia Password</div>
+                    <div onclick="apriCambioPassword()" style="cursor:pointer; font-size: 14px; font-weight: bold; white-space: nowrap; margin-bottom: 10px;">🔑 Cambia Password</div>
+                    <div onclick="apriGestioneCategorie()" style="cursor:pointer; font-size: 14px; font-weight: bold; white-space: nowrap; color: var(--accent);">⚙️ CATEGORIE SPESA</div>
                 </div>
 
                 <div id="status-online" style="color: #2ecc71; font-size: 12px; font-weight: bold;">🟢 Online</div>
@@ -132,8 +133,19 @@
             <button class="btn btn-danger" onclick="navigate('home')" style="width:100%;">Annulla</button>
         </div>
 
+        <div id="view-gestione-categorie" class="hidden card">
+            <h3>Gestione Categorie & Parole Chiave</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <input type="text" id="nuova-cat-nome" placeholder="Es: ⚽ Sport" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
+                <button class="btn" style="margin:0; background-color: var(--success);" onclick="aggiungiNuovaCategoria()">➕ Cat.</button>
+            </div>
+            <div id="lista-categorie-manager" style="max-height: 420px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #eee; padding: 10px; border-radius: 5px;"></div>
+            <button class="btn btn-danger" onclick="navigate('home')" style="width:100%;">Torna alla Home</button>
+        </div>
+
         <div id="view-archivio" class="hidden card">
             <h3 style="margin-top: 0;">Archivio Spese</h3>
+            <p style="font-size: 11px; color: #7f8c8d; margin-top: -10px; margin-bottom: 15px;">💡 Su PC fai <u>tasto destro</u> su una riga, o su smartphone <u>tieni premuto</u> per forzare o inserire una nuova categoria.</p>
             <div style="display:flex; gap:5px; margin-bottom: 15px;">
                 <button class="btn" style="flex:1; background-color: var(--success); padding: 12px 5px;" onclick="esportaExcel()">📥 Export</button>
                 <button class="btn" style="flex:1; background-color: #e67e22; padding: 12px 5px;" onclick="document.getElementById('import-excel-input').click()">📤 Import</button>
@@ -145,8 +157,9 @@
                     <thead>
                         <tr>
                             <th onclick="cambiaOrdinamento('data')">Data ↕️</th>
-                            <th onclick="cambiaOrdinamento('utente')">Utente ↕️</th>
-                            <th onclick="cambiaOrdinamento('causale')">Causale ↕️</th>
+                            <th onclick="cambiaOrdinamento('utente')">Chi ↕️</th>
+                            <th>Categoria Spesa</th>
+                            <th onclick="cambiaOrdinamento('causale')">Causale Spesa ↕️</th>
                             <th onclick="cambiaOrdinamento('importo')">€ ↕️</th>
                             <th>Azioni</th>
                         </tr>
@@ -178,9 +191,22 @@
         </div>
     </div>
 
+    <div id="modal-cambio-categoria" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 15px;">
+        <div class="card" style="width: 100%; max-width: 400px; margin: 0; max-height: 95vh; overflow-y: auto;">
+            <h3 style="margin-top: 0; color: var(--primary);">Forza Categoria Spesa</h3>
+            <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Sposta la spesa selezionata in un'altra categoria online o creane una al volo:</p>
+            <div id="opzioni-categorie-recat" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px;"></div>
+            <div style="border-top: 1px solid #eee; padding-top: 15px; display: flex; gap: 5px; margin-bottom: 15px;">
+                <input type="text" id="nuova-cat-forzata-nome" placeholder="Nuova categoria al volo..." style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
+                <button class="btn" style="margin: 0; background-color: var(--success);" onclick="creaEForzaNuovaCategoria()">➕ Crea</button>
+            </div>
+            <button class="btn btn-danger" style="width: 100%; margin: 0;" onclick="chiudiModalRecat()">Chiudi Finestra</button>
+        </div>
+    </div>
+
     <script>
         // ==========================================
-        // CONFIGURAZIONE FIREBASE (PRESERVATA)
+        // CONFIGURAZIONE FIREBASE
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyAaUv31Q6cK_c-CkiS91rAMFvo90rHDRkc",
@@ -202,7 +228,9 @@
         // ==========================================
         let users = JSON.parse(localStorage.getItem('usersCasa')) || { 'ENZO': '1234', 'CLORINDA': '1234' };
         let spese = [];
+        let mappaCategorie = {}; // Caricata online in tempo reale dal Cloud
         let currentUser = null; 
+        let idSpesaSelezionataRecat = null;
         let chartCategorie = null; let chartUtenti = null;
         let sortConfig = { key: 'data', direction: 'desc' };
         let anniEspansi = new Set(); let primaAperturaArchivio = true;
@@ -214,11 +242,40 @@
         document.getElementById('stat-end').value = todayStr;
 
         // ==========================================
-        // LOGICA DI SINCRONIZZAZIONE REAL-TIME
+        // LOGICA DI SINCRONIZZAZIONE REAL-TIME (CLOUD CLOUD CLOUD)
         // ==========================================
         function initRealTimeSync() {
             if(!db) return alert("Firebase non configurato!");
             
+            // 1. SINCRONIZZAZIONE DI CATEGORIE E PAROLE CHIAVE
+            db.collection("categorie").onSnapshot((snapshot) => {
+                if (snapshot.empty) {
+                    // Generazione iniziale del database Categorie online con le tue nuove preferenze
+                    const defaultCategorie = {
+                        '🎓 Figli & Scuola': ['scuola', 'retta', 'asilo', 'mensa', 'libri', 'zaino', 'gb', 'figli', 'gc', 'gabriele', 'giancarlo'],
+                        '🛒 Alimentari': ['spesa', 'supermercato', 'decò', 'conad', 'coop', 'esselunga', 'pane', 'macellaio', 'frutta'],
+                        '🏠 Casa & Utenze': ['luce', 'gas', 'acqua', 'bolletta', 'internet', 'affitto', 'mutuo', 'condominio', 'ikea'],
+                        '🚗 Trasporti': ['benzina', 'diesel', 'assicurazione', 'meccanico', 'telepass', 'treno', 'aereo'],
+                        '💊 Salute': ['farmacia', 'medico', 'pediatra', 'dentista', 'medicina', 'ticket', 'visita', 'otorino', 'ortopedico', 'dermatologo'],
+                        '🍕 Svago': ['pizza', 'ristorante', 'sushi', 'cinema', 'bar', 'vacanza', 'regalo', 'abbigliamento'],
+                        '⚽ Sport': ['nuoto', 'palestra', 'calcetto']
+                    };
+                    for (const [cat, kws] of Object.entries(defaultCategorie)) {
+                        db.collection("categorie").doc(cat).set({ keywords: kws });
+                    }
+                } else {
+                    mappaCategorie = {};
+                    snapshot.forEach(doc => {
+                        mappaCategorie[doc.id] = doc.data().keywords || [];
+                    });
+                    if(!document.getElementById('view-archivio').classList.contains('hidden')) caricaArchivio();
+                    if(!document.getElementById('view-statistiche').classList.contains('hidden')) generaStatistiche();
+                    if(!document.getElementById('view-gestione-categorie').classList.contains('hidden')) renderingGestioneCategorie();
+                    aggiornaWidgetDelta();
+                }
+            });
+
+            // 2. SINCRONIZZAZIONE DEI MOVIMENTI DI SPESA
             db.collection("spese").onSnapshot((snapshot) => {
                 spese = [];
                 snapshot.forEach((doc) => {
@@ -231,18 +288,14 @@
             });
         }
 
-	function categorizzaSpesa(causale) {
+        // Calcola la categoria controllando prima se è stata forzata a mano sul database cloud
+        function categorizzaSpesa(causale, spesaDoc) {
+            if (spesaDoc && spesaDoc.categoria) {
+                return spesaDoc.categoria;
+            }
             const testo = causale.toLowerCase();
-            const categorie = {
-                '🎓 Figli & Scuola': ['scuola', 'retta', 'asilo', 'mensa', 'libri', 'zaino', 'gb', 'figli'],
-                '🛒 Alimentari': ['spesa', 'supermercato', 'decò', 'conad', 'coop', 'esselunga', 'pane', 'macellaio', 'frutta'],
-                '🏠 Casa & Utenze': ['luce', 'gas', 'acqua', 'bolletta', 'internet', 'affitto', 'mutuo', 'condominio', 'ikea'],
-                '🚗 Trasporti': ['benzina', 'diesel', 'assicurazione', 'meccanico', 'telepass', 'treno', 'aereo'],
-                '💊 Salute': ['farmacia', 'medico', 'pediatra', 'dentista', 'medicina', 'ticket'],
-                '🍕 Svago': ['pizza', 'ristorante', 'sushi', 'cinema', 'bar', 'vacanza', 'regalo', 'abbigliamento']
-            };
-            for (const [categoria, keywords] of Object.entries(categorie)) { 
-                if (keywords.some(kw => testo.includes(kw))) return categoria; 
+            for (const [categoria, keywords] of Object.entries(mappaCategorie)) { 
+                if (keywords.some(kw => testo.includes(kw.toLowerCase()))) return categoria; 
             }
             return '📦 Varie';
         }
@@ -261,11 +314,8 @@
         
         function logout() { currentUser = null; document.getElementById('app-screen').classList.add('hidden'); document.getElementById('login-screen').classList.remove('hidden'); document.getElementById('delta-widget').style.display = 'none'; }
         
-        // ==========================================
-        // NAVIGAZIONE PROTETTA (SISTEMATA)
-        // ==========================================
         function navigate(viewName) { 
-            const views = ['home', 'inserimento', 'archivio', 'statistiche', 'modifica', 'cambio-password'];
+            const views = ['home', 'inserimento', 'archivio', 'statistiche', 'modifica', 'cambio-password', 'gestione-categorie'];
             views.forEach(v => {
                 const el = document.getElementById('view-' + v);
                 if(el) el.classList.add('hidden');
@@ -276,6 +326,7 @@
             
             if(viewName === 'archivio') caricaArchivio(); 
             if(viewName === 'statistiche') generaStatistiche(); 
+            if(viewName === 'gestione-categorie') renderingGestioneCategorie();
             
             const menu = document.getElementById('settings-menu');
             if(menu) menu.classList.add('hidden');
@@ -286,9 +337,89 @@
             if(menu) menu.classList.toggle('hidden');
         }
 
+        // ==========================================
+        // SEZIONE GESTIONE INTERFACCIA CATEGORIE 
+        // ==========================================
+        function apriGestioneCategorie() {
+            navigate('gestione-categorie');
+        }
+
+        function renderingGestioneCategorie() {
+            const container = document.getElementById('lista-categorie-manager');
+            if(!container) return;
+            container.innerHTML = '';
+            
+            const elencoCategorie = Object.keys(mappaCategorie);
+            elencoCategorie.forEach((cat, index) => {
+                const kws = mappaCategorie[cat] || [];
+                const catBox = document.createElement('div');
+                catBox.style.border = "1px solid #ddd";
+                catBox.style.borderRadius = "8px";
+                catBox.style.padding = "12px";
+                catBox.style.marginBottom = "10px";
+                catBox.style.background = "#f9f9f9";
+                
+                let kwsHtml = kws.map(kw => `
+                    <span style="display: inline-flex; align-items: center; background: #e0e0e0; padding: 4px 8px; border-radius: 4px; margin: 3px; font-size: 13px; font-weight: bold;">
+                        ${kw} <b style="margin-left: 6px; cursor: pointer; color: var(--danger); font-size: 14px;" onclick="rimuoviParolaChiave('${cat}', '${kw}')">×</b>
+                    </span>
+                `).join('');
+                
+                catBox.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <strong style="font-size: 15px; color: var(--primary);">${cat}</strong>
+                        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px; margin:0;" onclick="eliminaCategoriaIntera('${cat}')">🗑️ Elimina</button>
+                    </div>
+                    <div style="margin-bottom: 10px; display: flex; flex-wrap: wrap;">
+                        ${kwsHtml || '<em style="color:#888; font-size:12px;">Nessuna parola chiave associata</em>'}
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <input type="text" id="add-kw-${index}" placeholder="Nuova parola..." style="flex:1; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;">
+                        <button class="btn" style="padding: 6px 12px; font-size: 13px; margin:0; background-color: var(--success);" onclick="aggiungiParolaChiave('${cat}', ${index})">➕ Parola</button>
+                    </div>
+                `;
+                container.appendChild(catBox);
+            });
+        }
+
+        function aggiungiNuovaCategoria() {
+            const nome = document.getElementById('nuova-cat-nome').value.trim();
+            if(!nome) return alert("Specifica un nome per la categoria!");
+            if(mappaCategorie[nome]) return alert("Questa categoria esiste già!");
+            
+            db.collection("categorie").doc(nome).set({ keywords: [] })
+            .then(() => { document.getElementById('nuova-cat-nome').value = ''; });
+        }
+
+        function eliminaCategoriaIntera(cat) {
+            if(confirm(`Sicuro di eliminare "${cat}" online?\nLe parole chiave verranno eliminate.`)) {
+                db.collection("categorie").doc(cat).delete();
+            }
+        }
+
+        function aggiungiParolaChiave(cat, idx) {
+            const input = document.getElementById(`add-kw-${idx}`);
+            const kw = input.value.trim();
+            if(!kw) return alert("Scrivi una parola!");
+            
+            let attuali = mappaCategorie[cat] || [];
+            if(attuali.map(v => v.toLowerCase()).includes(kw.toLowerCase())) return alert("Esiste già!");
+            
+            attuali.push(kw);
+            db.collection("categorie").doc(cat).update({ keywords: attuali });
+        }
+
+        function rimuoviParolaChiave(cat, kw) {
+            let attuali = mappaCategorie[cat] || [];
+            let filtrate = attuali.filter(item => item !== kw);
+            db.collection("categorie").doc(cat).update({ keywords: filtrate });
+        }
+
+        // ==========================================
+        // GESTIONE PASSSWORD INTEGRATA
+        // ==========================================
         function apriCambioPassword() {
-            const menu = document.getElementById('settings-menu');
-            if(menu) menu.classList.add('hidden');
+            document.getElementById('settings-menu').classList.add('hidden');
             document.getElementById('pass-attuale').value = '';
             document.getElementById('pass-nuova').value = '';
             document.getElementById('pass-conferma').value = '';
@@ -312,7 +443,7 @@
         }
 
         // ==========================================
-        // OPERAZIONI DATABASE
+        // OPERAZIONI MOVIMENTI SPESE
         // ==========================================
         function salvaSpesa() {
             const data = document.getElementById('spesa-data').value; const causale = document.getElementById('spesa-causale').value.trim(); const importo = parseFloat(document.getElementById('spesa-importo').value);
@@ -327,31 +458,77 @@
         }
 
         function eliminaSpesa(id) { 
-            if (confirm("Eliminare dal database online?")) { 
-                db.collection("spese").doc(id).delete(); 
-            } 
+            if (confirm("Eliminare dal database online?")) { db.collection("spese").doc(id).delete(); } 
         }
 
         function salvaModifica() { 
             const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); 
             if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); 
-            if (confirm("Salvare online?")) { 
-                db.collection("spese").doc(id).update({ utente, data, causale, importo }).then(() => navigate('archivio')); 
-            } 
+            if (confirm("Salvare online?")) { db.collection("spese").doc(id).update({ utente, data, causale, importo }).then(() => navigate('archivio')); } 
         }
 
         function svuotaArchivio() { 
             if (confirm("⚠️ ATTENZIONE ESTREMA!\nVuoi cancellare l'INTERO archivio online di ENZO e CLORINDA?\nTutti i dati verranno persi per sempre per entrambi.")) { 
-                spese.forEach(s => {
-                    db.collection("spese").doc(s.id).delete();
-                });
-                anniEspansi.clear();
-                alert("Archivio azzerato con successo dal database.");
+                spese.forEach(s => { db.collection("spese").doc(s.id).delete(); });
+                anniEspansi.clear(); alert("Archivio azzerato con successo dal database.");
             } 
         }
 
         // ==========================================
-        // INTERFACCIA E TABELLA (DECIMALI CORETTE)
+        // GESTIONE RECATEGORIZZAZIONE FORZATA (CLICK DX / LONG PRESS)
+        // ==========================================
+        function apriModalRecat(spesaId) {
+            idSpesaSelezionataRecat = spesaId;
+            const container = document.getElementById('opzioni-categorie-recat');
+            if(!container) return;
+            container.innerHTML = '';
+            
+            const tutteLeCat = Object.keys(mappaCategorie);
+            if (!tutteLeCat.includes('📦 Varie')) tutteLeCat.push('📦 Varie');
+            
+            tutteLeCat.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.style.width = '100%'; btn.style.textAlign = 'left'; btn.style.margin = '0';
+                btn.style.background = '#f1f2f6'; btn.style.color = '#333'; btn.style.border = '1px solid #ddd';
+                btn.innerText = cat;
+                btn.onclick = () => forzaCategoriaSpesa(cat);
+                container.appendChild(btn);
+            });
+            
+            document.getElementById('nuova-cat-forzata-nome').value = '';
+            document.getElementById('modal-cambio-categoria').classList.remove('hidden');
+        }
+
+        function chiudiModalRecat() {
+            document.getElementById('modal-cambio-categoria').classList.add('hidden');
+            idSpesaSelezionataRecat = null;
+        }
+
+        function forzaCategoriaSpesa(categoriaNome) {
+            if(!idSpesaSelezionataRecat) return;
+            db.collection("spese").doc(idSpesaSelezionataRecat).update({
+                categoria: categoriaNome
+            }).then(() => {
+                chiudiModalRecat();
+            }).catch(err => alert("Errore salvataggio: " + err));
+        }
+
+        function creaEForzaNuovaCategoria() {
+            const nomeNuovaCat = document.getElementById('nuova-cat-forzata-nome').value.trim();
+            if(!nomeNuovaCat) return alert("Scrivi il nome della nuova categoria!");
+            
+            if(!mappaCategorie[nomeNuovaCat]) {
+                db.collection("categorie").doc(nomeNuovaCat).set({ keywords: [] })
+                .then(() => { forzaCategoriaSpesa(nomeNuovaCat); })
+                .catch(err => alert("Errore: " + err));
+            } else {
+                forzaCategoriaSpesa(nomeNuovaCat);
+            }
+        }
+
+        // ==========================================
+        // INTERFACCIA TABELLA ARCHIVIO (AGGIORNATA CON COLONNA EXTRA)
         // ==========================================
         function cambiaOrdinamento(key) { if (sortConfig.key === key) sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc'; else { sortConfig.key = key; sortConfig.direction = (key === 'data' || key === 'importo') ? 'desc' : 'asc'; } caricaArchivio(); }
         function toggleAnno(anno) { if (anniEspansi.has(anno)) anniEspansi.delete(anno); else anniEspansi.add(anno); caricaArchivio(); }
@@ -373,14 +550,38 @@
                 });
                 const espanso = anniEspansi.has(anno);
                 const trAnno = document.createElement('tr'); trAnno.className = 'year-header';
-                trAnno.innerHTML = `<td colspan="5" onclick="toggleAnno('${anno}')"><span class="btn-toggle">${espanso ? '[-]' : '[+]'}</span> Anno ${anno} <span style="float:right; font-size:12px; font-weight:normal;">(${spesePerAnno[anno].length})</span></td>`;
+                trAnno.innerHTML = `<td colspan="6" onclick="toggleAnno('${anno}')"><span class="btn-toggle">${espanso ? '[-]' : '[+]'}</span> Anno ${anno} <span style="float:right; font-size:12px; font-weight:normal;">(${spesePerAnno[anno].length})</span></td>`;
                 tbody.appendChild(trAnno);
 
                 spesePerAnno[anno].forEach(s => {
                     const tr = document.createElement('tr'); if (!espanso) tr.classList.add('hidden');
-                    const dataFormat = new Date(s.data).toLocaleDateString('it-IT'); let iconaCat = categorizzaSpesa(s.causale).split(' ')[0]; 
-                    tr.innerHTML = `<td>${dataFormat}</td><td><b>${s.utente.substring(0,3)}</b></td><td>${iconaCat} ${s.causale.toUpperCase()}</td><td>€${s.importo.toFixed(2)}</td>
-                    <td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px;" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px;" onclick="eliminaSpesa('${s.id}')">❌</button></td>`;
+                    const dataFormat = new Date(s.data).toLocaleDateString('it-IT'); 
+                    
+                    let catCorrente = categorizzaSpesa(s.causale, s);
+                    
+                    tr.innerHTML = `
+                        <td>${dataFormat}</td>
+                        <td><b>${s.utente.substring(0,3)}</b></td>
+                        <td style="font-weight:700; color:var(--secondary);">${catCorrente}</td>
+                        <td>${s.causale.toUpperCase()}</td>
+                        <td><b>€${s.importo.toFixed(2)}</b></td>
+                        <td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px;" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px;" onclick="eliminaSpesa('${s.id}')">❌</button></td>
+                    `;
+                    
+                    // INTERCETTA TASTO DESTRO (DESKTOP)
+                    tr.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        apriModalRecat(s.id);
+                    });
+                    
+                    // INTERCETTA PRESSIONE PROLUNGATA (MOBILE)
+                    let timerLongPress = null;
+                    tr.addEventListener('touchstart', () => {
+                        timerLongPress = setTimeout(() => { apriModalRecat(s.id); }, 600);
+                    }, { passive: true });
+                    tr.addEventListener('touchend', () => clearTimeout(timerLongPress));
+                    tr.addEventListener('touchmove', () => clearTimeout(timerLongPress));
+                    
                     tbody.appendChild(tr);
                 });
             });
@@ -404,7 +605,7 @@
         // ==========================================
         // EXPORT / IMPORT
         // ==========================================
-        function esportaExcel() { if (spese.length === 0) return alert("Vuoto."); let speseOrdinate = [...spese].sort((a, b) => new Date(b.data) - new Date(a.data)); const ws = XLSX.utils.json_to_sheet(speseOrdinate.map(s => ({ 'Utente': s.utente, 'Data': new Date(s.data).toLocaleDateString('it-IT'), 'Causale': s.causale.toUpperCase(), 'Costo (€)': s.importo }))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Archivio_Spese"); XLSX.writeFile(wb, "Spese_Casa.xlsx"); }
+        function esportaExcel() { if (spese.length === 0) return alert("Vuoto."); let speseOrdinate = [...spese].sort((a, b) => new Date(b.data) - new Date(a.data)); const ws = XLSX.utils.json_to_sheet(speseOrdinate.map(s => ({ 'Utente': s.utente, 'Data': new Date(s.data).toLocaleDateString('it-IT'), 'Categoria': categorizzaSpesa(s.causale, s), 'Causale': s.causale.toUpperCase(), 'Costo (€)': s.importo }))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Archivio_Spese"); XLSX.writeFile(wb, "Spese_Casa.xlsx"); }
         function formDataToString(rawData) { if (rawData instanceof Date && !isNaN(rawData)) { let anno = rawData.getFullYear(); let mese = String(rawData.getMonth() + 1).padStart(2, '0'); let giorno = String(rawData.getDate()).padStart(2, '0'); return `${anno}-${mese}-${giorno}`; } else if (rawData) { let dateStr = String(rawData).trim(); if (dateStr.includes('/')) { let p = dateStr.split('/'); if (p.length === 3) { if (p[2].length === 4) return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`; if (p[0].length === 4) return `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`; } } else if (dateStr.includes('-')) { let p = dateStr.split('-'); if (p.length === 3 && p[0].length === 4) return dateStr; } } return ""; }
         
         function importaExcel(event) { 
@@ -419,23 +620,28 @@
                         db.collection("spese").add({ utente: utente, data: dataFormattata, causale: causale, importo: importo });
                         count++; 
                     } 
-                    if (count > 0) alert(`Importazione avviata per ${count} movimenti!`); 
+                    if (count > 0) alert(`Importazione completata online per ${count} movimenti!`); 
                 } catch (err) { alert("Errore."); } event.target.value = ''; 
             }; reader.readAsArrayBuffer(file); 
         }
 
         // ==========================================
-        // REPORT / GRAPHICS
+        // REPORT / STATISTICHE CON VARIABILE UNICA 
         // ==========================================
         function generaStatistiche() {
             const start = document.getElementById('stat-start').value; const end = document.getElementById('stat-end').value; const speseFiltrate = spese.filter(s => s.data >= start && s.data <= end);
-            let totEnzo = 0; let totClorinda = 0; let mappaCategorie = {};
-            speseFiltrate.forEach(s => { if(s.utente === 'ENZO') totEnzo += s.importo; if(s.utente === 'CLORINDA') totClorinda += s.importo; let cat = categorizzaSpesa(s.causale); if(mappaCategorie[cat]) mappaCategorie[cat] += s.importo; else mappaCategorie[cat] = s.importo; });
+            let totEnzo = 0; let totClorinda = 0; let conteggioCategorie = {};
+            speseFiltrate.forEach(s => { 
+                if(s.utente === 'ENZO') totEnzo += s.importo; 
+                if(s.utente === 'CLORINDA') totClorinda += s.importo; 
+                let cat = categorizzaSpesa(s.causale, s); 
+                if(conteggioCategorie[cat]) conteggioCategorie[cat] += s.importo; else conteggioCategorie[cat] = s.importo; 
+            });
             const totaleGenerale = totEnzo + totClorinda;
             document.getElementById('rep-totale').innerText = `€ ${totaleGenerale.toFixed(2)}`; document.getElementById('rep-enzo').innerText = `€ ${totEnzo.toFixed(2)}`; document.getElementById('rep-clorinda').innerText = `€ ${totClorinda.toFixed(2)}`;
             const tbodyCat = document.getElementById('tabella-categorie'); tbodyCat.innerHTML = '';
             if (totaleGenerale === 0) { if(chartCategorie) chartCategorie.destroy(); if(chartUtenti) chartUtenti.destroy(); tbodyCat.innerHTML = '<tr><td colspan="2" class="text-center">Nessuna spesa nel periodo.</td></tr>'; return; }
-            const categorieOrdinate = Object.entries(mappaCategorie).sort((a, b) => b[1] - a[1]); const etichetteCat = categorieOrdinate.map(item => item[0]); const datiCat = categorieOrdinate.map(item => item[1]);
+            const categorieOrdinate = Object.entries(conteggioCategorie).sort((a, b) => b[1] - a[1]); const etichetteCat = categorieOrdinate.map(item => item[0]); const datiCat = categorieOrdinate.map(item => item[1]);
             const baseColors = [ '#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#1abc9c', '#34495e' ];
             categorieOrdinate.forEach(item => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${item[0]}</td><td><b>€ ${item[1].toFixed(2)}</b></td>`; tbodyCat.appendChild(tr); });
             const ctxCat = document.getElementById('catChart').getContext('2d'); if(chartCategorie) chartCategorie.destroy(); chartCategorie = new Chart(ctxCat, { type: 'doughnut', data: { labels: etichetteCat, datasets: [{ data: datiCat, backgroundColor: baseColors.slice(0, etichetteCat.length), borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
