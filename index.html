@@ -286,13 +286,20 @@
     <div id="modal-gestione-backup" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 15px;">
         <div class="card" style="width: 100%; max-width: 450px; margin: 0; max-height: 90vh; display: flex; flex-direction: column;">
             <h3 style="margin-top: 0; color: #8e44ad;">🕒 Punti di Ripristino</h3>
-            <p style="font-size: 12px; color: #555; margin-bottom: 15px;">I backup vengono creati automaticamente e conservati per un anno. Clicca su un punto per visualizzarne l'anteprima senza rischi.</p>
+            
+            <div style="border-bottom: 1px solid #ddd; padding-bottom: 15px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: var(--primary); font-size: 14px;">💾 Crea Backup Manuale</h4>
+                <input type="text" id="nota-backup-manuale" placeholder="Note (opzionale, es: prima delle ferie)" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px; font-size: 13px;">
+                <button class="btn" style="width: 100%; margin: 0; background-color: var(--success);" onclick="creaBackupManuale(event)">➕ Crea Backup Ora</button>
+            </div>
+
+            <p style="font-size: 12px; color: #555; margin-bottom: 10px; margin-top: 0;">Clicca su un backup per visualizzarne l'anteprima senza rischi.</p>
             
             <div id="lista-backups" style="flex: 1; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #f9f9f9; margin-bottom: 15px; display:flex; flex-direction: column; gap: 8px;">
                 <p style="text-align:center; font-size:13px; color:#999;">Caricamento backup in corso...</p>
             </div>
 
-            <button class="btn btn-danger" style="width: 100%; margin: 0;" onclick="chiudiModalBackup()">Chiudi</button>
+            <button class="btn btn-danger" style="width: 100%; margin: 0;" onclick="chiudiModalBackup()">Chiudi Finestra</button>
         </div>
     </div>
 
@@ -376,9 +383,7 @@
             });
 
             db.collection("spese").onSnapshot((snapshot) => {
-                // Se siamo in anteprima, ignoriamo gli aggiornamenti in tempo reale per non sovrascrivere l'anteprima
                 if (isPreviewMode) return; 
-                
                 spese = [];
                 snapshot.forEach((doc) => { spese.push({ id: doc.id, ...doc.data() }); });
                 popolaAnniConfronto();
@@ -424,10 +429,9 @@
         // GESTIONE BACKUP (CREAZIONE E PULIZIA)
         // ==========================================
         function creaBackupAutomaticoGiornaliero() {
-            // Controlla se abbiamo già fatto un backup oggi in questa sessione
             const oggi = new Date().toLocaleDateString('it-IT');
             const ultimoBk = localStorage.getItem('ultimoBackupAutomatico');
-            if (ultimoBk === oggi) return; // Già fatto oggi
+            if (ultimoBk === oggi) return; 
 
             setTimeout(() => {
                 if (spese.length > 0) {
@@ -435,10 +439,27 @@
                         localStorage.setItem('ultimoBackupAutomatico', oggi);
                     });
                 }
-            }, 5000); // Ritardo di 5 secondi per permettere il caricamento delle spese dal DB
+            }, 5000); 
         }
 
-        function eseguiSalvataggioBackup(motivo) {
+        function creaBackupManuale(event) {
+            const nota = document.getElementById('nota-backup-manuale').value.trim();
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "⏳ Creazione in corso...";
+            btn.disabled = true;
+
+            eseguiSalvataggioBackup("Backup Manuale", nota).then(() => {
+                document.getElementById('nota-backup-manuale').value = '';
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                apriModalBackup(); // Ricarica la lista per mostrare quello appena fatto
+                alert("✅ Backup manuale creato con successo!");
+            });
+        }
+
+        // Aggiunto il parametro opzionale "note"
+        function eseguiSalvataggioBackup(motivo, note = "") {
             return new Promise((resolve) => {
                 if (!spese || spese.length === 0) { resolve(); return; }
                 const now = new Date();
@@ -450,11 +471,12 @@
                     timestamp: ts,
                     data_creazione: dateFormattata,
                     motivo: motivo,
+                    note: note,
                     dati: datiJson
                 }).then(() => {
                     pulisciBackupVecchi();
                     resolve();
-                }).catch(() => resolve()); // Silenzioso in caso di errore
+                }).catch(() => resolve()); 
             });
         }
 
@@ -481,10 +503,14 @@
                 }
                 snapshot.forEach(doc => {
                     const bk = doc.data();
+                    
+                    // Mostra la nota se presente
+                    const noteHtml = bk.note ? `<br><span style="color:var(--primary); font-size: 12px; font-weight:bold;">📝 ${bk.note}</span>` : '';
+                    
                     const btn = document.createElement('button');
                     btn.className = 'btn';
-                    btn.style.cssText = 'width:100%; text-align:left; margin:0; background:#fff; color:#333; border:1px solid #ccc; display:flex; justify-content:space-between; align-items:center;';
-                    btn.innerHTML = `<span><b>Restore al ${bk.data_creazione}</b> <br><small style="color:#777;">${bk.motivo}</small></span> <span style="font-size:18px;">👁️</span>`;
+                    btn.style.cssText = 'width:100%; text-align:left; margin:0; background:#fff; color:#333; border:1px solid #ccc; display:flex; justify-content:space-between; align-items:center; line-height: 1.4;';
+                    btn.innerHTML = `<span><b>Restore al ${bk.data_creazione}</b> <br><small style="color:#777;">${bk.motivo}</small>${noteHtml}</span> <span style="font-size:18px;">👁️</span>`;
                     btn.onclick = () => avviaAnteprima(bk.dati, bk.data_creazione);
                     lista.appendChild(btn);
                 });
@@ -503,12 +529,11 @@
                 previewSpese = JSON.parse(datiJsonString);
                 isPreviewMode = true;
                 
-                // Mostra il banner giallo
                 document.getElementById('preview-banner').classList.remove('hidden');
                 document.getElementById('archivio-actions').classList.add('hidden');
                 document.getElementById('preview-text').innerHTML = `🔍 ANTEPRIMA: Stai visualizzando i dati del backup creato il <b>${dataCreazione}</b>`;
                 
-                caricaArchivio(); // Ricarica la tabella usando i dati dell'anteprima
+                caricaArchivio(); 
             } catch (e) {
                 alert("Errore nella lettura del file di backup.");
             }
@@ -519,7 +544,7 @@
             previewSpese = [];
             document.getElementById('preview-banner').classList.add('hidden');
             document.getElementById('archivio-actions').classList.remove('hidden');
-            caricaArchivio(); // Ricarica la tabella con i dati reali correnti
+            caricaArchivio(); 
         }
 
         async function confermaRipristino() {
@@ -528,28 +553,24 @@
             document.getElementById('preview-banner').innerHTML = `<h4 style="margin:0;">⏳ Ripristino in corso, non chiudere l'app...</h4>`;
             
             try {
-                // 1. Facciamo un backup di sicurezza dell'attuale stato prima di sovrascriverlo
                 await eseguiSalvataggioBackup("Pre-Ripristino Sicurezza");
 
-                // 2. Cancelliamo tutto l'archivio corrente
                 for (let s of spese) {
                     await db.collection("spese").doc(s.id).delete();
                 }
 
-                // 3. Inseriamo i dati del backup
                 for (let bs of previewSpese) {
                     await db.collection("spese").add({
                         utente: bs.utente,
                         data: bs.data,
                         causale: bs.causale,
                         importo: bs.importo,
-                        categoria: bs.categoria || '📦 Varie' // Se è un backup vecchio senza categoria, mette varie
+                        categoria: bs.categoria || '📦 Varie' 
                     });
                 }
 
                 alert("✅ Restore completato con successo!");
                 
-                // Ristabilisce la grafica
                 document.getElementById('preview-banner').innerHTML = `
                     <span id="preview-text" style="font-size: 15px;">🔍 ANTEPRIMA</span>
                     <span style="font-size: 12px; font-weight: normal;">(In questa modalità le modifiche e le cancellazioni singole sono bloccate)</span>
@@ -563,11 +584,9 @@
                 previewSpese = [];
                 document.getElementById('preview-banner').classList.add('hidden');
                 document.getElementById('archivio-actions').classList.remove('hidden');
-                // caricaArchivio() verrà chiamato automaticamente dal listener di Firebase
 
             } catch (e) {
                 alert("Errore critico durante il ripristino: " + e);
-                // Forza ricaricamento
                 window.location.reload();
             }
         }
@@ -609,15 +628,12 @@
         function eliminaSpesa(id) { if(isPreviewMode) return alert("Azione bloccata in modalità anteprima."); if (confirm("Eliminare dal database?")) { db.collection("spese").doc(id).delete(); } }
         function salvaModifica() { const id = document.getElementById('mod-id').value; const utente = document.getElementById('mod-utente').value; const data = document.getElementById('mod-data').value; const causale = document.getElementById('mod-causale').value.trim(); const importo = parseFloat(document.getElementById('mod-importo').value); if (!data || !causale || isNaN(importo) || importo <= 0) return alert("Verifica i campi."); if (confirm("Salvare?")) { db.collection("spese").doc(id).update({ utente, data, causale, importo }).then(() => navigate('archivio')); } }
 
-        // DOPPIA CONFERMA SVUOTA ARCHIVIO
         async function svuotaArchivio() { 
             if (confirm("⚠️ ATTENZIONE ESTREMA!\nVuoi cancellare l'INTERO archivio online?\nTutti i dati andranno persi per sempre!")) { 
                 const sicurezza = prompt("Questa azione è irreversibile.\nScrivi la parola 'CANCELLA' (tutto in maiuscolo) per confermare l'azzeramento totale:");
                 
                 if (sicurezza === "CANCELLA") {
-                    // Crea backup di emergenza poco prima di esplodere tutto
                     await eseguiSalvataggioBackup("Pre-Azzeramento Manuale");
-
                     spese.forEach(s => { db.collection("spese").doc(s.id).delete(); }); 
                     anniEspansi.clear(); 
                     alert("Archivio azzerato con successo. (È stato creato un backup di emergenza per sicurezza).");
@@ -643,9 +659,7 @@
         function apriModifica(id) { if(isPreviewMode) return alert("Azione bloccata in modalità anteprima."); const dataArray = isPreviewMode ? previewSpese : spese; const spesa = dataArray.find(s => String(s.id) === String(id) || s.id === undefined); if (!spesa) return; document.getElementById('mod-id').value = spesa.id || ''; document.getElementById('mod-utente').value = spesa.utente; document.getElementById('mod-data').value = spesa.data; document.getElementById('mod-causale').value = spesa.causale; document.getElementById('mod-importo').value = spesa.importo; navigate('modifica'); }
 
         function caricaArchivio() {
-            // Decide se leggere i dati reali o l'anteprima
             const dataToRender = isPreviewMode ? previewSpese : spese;
-
             const tbody = document.querySelector('#tabella-spese tbody'); tbody.innerHTML = ''; if (dataToRender.length === 0) return;
             let spesePerAnno = {}; dataToRender.forEach(s => { const anno = s.data.substring(0, 4); if (!spesePerAnno[anno]) spesePerAnno[anno] = []; spesePerAnno[anno].push(s); });
             const anniOrdinati = Object.keys(spesePerAnno).sort((a, b) => b - a);
@@ -666,7 +680,6 @@
                     const tr = document.createElement('tr'); if (!espanso) tr.classList.add('hidden');
                     let catCorrente = categorizzaSpesa(s.causale, s);
                     
-                    // Se siamo in anteprima, disabilitiamo i tasti graficamente
                     const btnStyle = isPreviewMode ? "opacity:0.5; cursor:not-allowed;" : "";
 
                     tr.innerHTML = `<td>${new Date(s.data).toLocaleDateString('it-IT')}</td><td><b>${s.utente.substring(0,3)}</b></td><td style="font-weight:700; color:var(--secondary);">${catCorrente}</td><td>${s.causale.toUpperCase()}</td><td><b>€${s.importo.toFixed(2)}</b></td><td style="white-space: nowrap;"><button class="btn" style="padding:4px; font-size:10px; ${btnStyle}" onclick="apriModifica('${s.id}')">✏️</button><button class="btn btn-danger" style="padding:4px; font-size:10px; ${btnStyle}" onclick="eliminaSpesa('${s.id}')">❌</button></td>`;
