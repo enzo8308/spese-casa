@@ -470,8 +470,8 @@
             const widget = document.getElementById('delta-widget'); if(!currentUser) { widget.style.display = 'none'; return; }
             let spesaEnzo = 0; let spesaClorinda = 0; spese.forEach(s => { if (s.utente === 'ENZO') spesaEnzo += s.importo; else if (s.utente === 'CLORINDA') spesaClorinda += s.importo; });
             widget.style.display = 'block';
-            if (spesaEnzo > spesaClorinda) { widget.style.backgroundColor = 'var(--enzo-color)'; widget.innerHTML = `<span class="delta-titolo">CLORINDA DA RITIRARE:</span><span class="delta-cifra">€ ${(spesaEnzo - spesaClorinda).toFixed(2)}</span>`; } 
-            else if (spesaClorinda > spesaEnzo) { widget.style.backgroundColor = 'var(--clorinda-color)'; widget.innerHTML = `<span class="delta-titolo">ENZO DA RITIRARE:</span><span class="delta-cifra">€ ${(spesaClorinda - spesaEnzo).toFixed(2)}</span>`; } 
+            if (spesaEnzo > spesaClorinda) { widget.style.backgroundColor = 'var(--enzo-color)'; widget.innerHTML = `<span class="delta-titolo">CLORINDA DA RITIRARE:</span><span class="delta-cifra" style="color:white; text-shadow: 1px 1px 2px rgba(0,0,0,0.4);">€ ${(spesaEnzo - spesaClorinda).toFixed(2)}</span>`; } 
+            else if (spesaClorinda > spesaEnzo) { widget.style.backgroundColor = 'var(--clorinda-color)'; widget.innerHTML = `<span class="delta-titolo">ENZO DA RITIRARE:</span><span class="delta-cifra" style="color:white; text-shadow: 1px 1px 2px rgba(0,0,0,0.4);">€ ${(spesaClorinda - spesaEnzo).toFixed(2)}</span>`; } 
             else { widget.style.backgroundColor = '#e1b12c'; widget.innerHTML = `<span class="delta-titolo">Stato conti:</span><span class="delta-cifra" style="color:white;">Pari!</span>`; }
         }
 
@@ -500,7 +500,7 @@
 
             if(valA && anniList.includes(valA)) selA.value = valA;
             if(valB && anniList.includes(valB)) selB.value = valB;
-            else if (anniList.length > 1) selB.value = anniList[1]; // Sceglie l'anno precedente come default per B
+            else if (anniList.length > 1) selB.value = anniList[1];
             
             aggiornaGraficoConfronto();
         }
@@ -509,7 +509,6 @@
             const container = document.getElementById('conf-categorie-container');
             if(!container) return;
             
-            // Salva selezioni correnti
             let selected = [];
             container.querySelectorAll('input:checked').forEach(cb => selected.push(cb.value));
             const isFirstLoad = container.innerHTML === '';
@@ -592,7 +591,16 @@
                     layout: { padding: { top: 25 } }, 
                     plugins: { 
                         legend: { display: false },
-                        datalabels: { anchor: 'end', align: 'end', formatter: v => '€ ' + v.toFixed(0), font: { weight: 'bold', size: 12 } }
+                        datalabels: { 
+                            color: '#ffffff',
+                            textStrokeColor: 'rgba(0,0,0,0.4)', // Bordino scuro per leggibilità
+                            textStrokeWidth: 2,
+                            anchor: 'end', 
+                            align: 'start', 
+                            offset: 5,
+                            formatter: v => '€ ' + v.toFixed(0), 
+                            font: { weight: 'bold', size: 14 } 
+                        }
                     }, 
                     scales: { y: { beginAtZero: true } } 
                 }
@@ -657,7 +665,26 @@
             chartCategorie = new Chart(ctxCat, { 
                 type: 'doughnut', 
                 data: { labels: categorieOrdinate.map(i => i[0]), datasets: [{ data: categorieOrdinate.map(i => i[1].totale), backgroundColor: baseColors, borderWidth: 2 }] }, 
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: { display: false } } } 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { position: 'bottom' }, 
+                        datalabels: { 
+                            color: '#ffffff',
+                            textStrokeColor: 'rgba(0,0,0,0.5)', // Bordino scuro
+                            textStrokeWidth: 2,
+                            font: { weight: 'bold', size: 12 },
+                            formatter: (value, context) => {
+                                let dataArr = context.chart.data.datasets[0].data;
+                                let sum = dataArr.reduce((a, b) => a + b, 0);
+                                let pct = (value * 100 / sum);
+                                if (pct < 4) return ''; // Nasconde etichetta se lo spicchio è molto piccolo (es. < 4%)
+                                return pct.toFixed(1) + '%';
+                            }
+                        } 
+                    } 
+                } 
             });
             
             const ctxUser = document.getElementById('userChart').getContext('2d'); 
@@ -670,7 +697,16 @@
                     layout: { padding: { top: 25 } }, 
                     plugins: { 
                         legend: { display: false },
-                        datalabels: { anchor: 'end', align: 'end', formatter: v => '€ ' + v.toFixed(0), font: { weight: 'bold', size: 12 } }
+                        datalabels: { 
+                            color: '#ffffff',
+                            textStrokeColor: 'rgba(0,0,0,0.4)', // Bordino scuro
+                            textStrokeWidth: 2,
+                            anchor: 'end', 
+                            align: 'start', 
+                            offset: 5,
+                            formatter: v => '€ ' + v.toFixed(0), 
+                            font: { weight: 'bold', size: 14 } 
+                        }
                     }, 
                     scales: { y: { beginAtZero: true } } 
                 } 
@@ -685,7 +721,6 @@
                     datasets: [
                         { label: 'Totale', data: mesiOrdinati.map(m => andamentoMensile[m].totale), borderColor: '#2c3e50', backgroundColor: '#2c3e50', tension: 0.3, borderWidth: 3 },
                         { label: 'Enzo', data: mesiOrdinati.map(m => andamentoMensile[m].enzo), borderColor: '#e84393', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, borderDash: [5, 5] },
-                        // Modificato Clo in Clò
                         { label: 'Clò', data: mesiOrdinati.map(m => andamentoMensile[m].clorinda), borderColor: '#0984e3', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, borderDash: [5, 5] }
                     ]
                 },
