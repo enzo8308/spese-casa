@@ -393,11 +393,15 @@
             });
         }
 
+        // --- FIX CRITICO: IGNOTA LA CATEGORIA FISSATA "📦 Varie" DAL VECCHIO BACKUP ---
         function categorizzaSpesa(causale, spesaDoc) {
-            if (spesaDoc && spesaDoc.categoria) return spesaDoc.categoria;
+            // Se c'è una categoria ma è diversa da "Varie", usala
+            if (spesaDoc && spesaDoc.categoria && spesaDoc.categoria !== '📦 Varie') return spesaDoc.categoria;
+            
+            // Altrimenti ricalcola sempre dalle parole chiave
             const testo = causale.toLowerCase();
             for (const [categoria, keywords] of Object.entries(mappaCategorie)) { 
-                if (keywords.some(kw => testo.includes(kw.toLowerCase()))) return categoria; 
+                if (keywords && keywords.some(kw => testo.includes(kw.toLowerCase()))) return categoria; 
             }
             return '📦 Varie';
         }
@@ -458,7 +462,6 @@
             });
         }
 
-        // Aggiunto il parametro opzionale "note"
         function eseguiSalvataggioBackup(motivo, note = "") {
             return new Promise((resolve) => {
                 if (!spese || spese.length === 0) { resolve(); return; }
@@ -503,8 +506,6 @@
                 }
                 snapshot.forEach(doc => {
                     const bk = doc.data();
-                    
-                    // Mostra la nota se presente
                     const noteHtml = bk.note ? `<br><span style="color:var(--primary); font-size: 12px; font-weight:bold;">📝 ${bk.note}</span>` : '';
                     
                     const btn = document.createElement('button');
@@ -547,6 +548,7 @@
             caricaArchivio(); 
         }
 
+        // --- FIX CRITICO: NON FORZARE LA CATEGORIA NEL RESTORE ---
         async function confermaRipristino() {
             if(!confirm("⚠️ ULTIMO AVVISO!\nSei assolutamente sicuro di voler sovrascrivere l'archivio attuale con i dati di questo backup?\nTutti i dati inseriti DOPO questo backup andranno persi.")) return;
             
@@ -560,13 +562,20 @@
                 }
 
                 for (let bs of previewSpese) {
-                    await db.collection("spese").add({
+                    let nuovaSpesa = {
                         utente: bs.utente,
                         data: bs.data,
                         causale: bs.causale,
-                        importo: bs.importo,
-                        categoria: bs.categoria || '📦 Varie' 
-                    });
+                        importo: bs.importo
+                    };
+                    
+                    // Se la spesa nel backup aveva una categoria forzata DIVERSA da "Varie", la conserva.
+                    // Altrimenti lascia che sia il sistema a calcolarla dinamicamente.
+                    if (bs.categoria && bs.categoria !== '📦 Varie') {
+                        nuovaSpesa.categoria = bs.categoria;
+                    }
+                    
+                    await db.collection("spese").add(nuovaSpesa);
                 }
 
                 alert("✅ Restore completato con successo!");
